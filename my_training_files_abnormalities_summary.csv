@@ -1,0 +1,151 @@
+TrainingFile,NumVolumes,NumAbnormalities,Abnormalities
+train_1064,2,2,"Lymphadenopathy, Lung opacity"
+train_1331,4,3,"Emphysema, Lung nodule, Pulmonary fibrotic sequela"
+train_1501,4,5,"Medical material, Lymphadenopathy, Atelectasis, Lung opacity, Pulmonary fibrotic sequela"
+train_1666,2,1,Lung nodule
+train_183,2,3,"Lung opacity, Peribronchial thickening, Bronchiectasis"
+train_2175,2,1,Lung nodule
+train_2546,2,3,"Hiatal hernia, Lung opacity, Consolidation"
+train_2981,1,3,"Hiatal hernia, Emphysema, Pulmonary fibrotic sequela"
+train_324,2,2,"Hiatal hernia, Pulmonary fibrotic sequela"
+train_3379,2,4,"Atelectasis, Lung nodule, Lung opacity, Mosaic attenuation pattern"
+train_3579,2,5,"Medical material, Lymphadenopathy, Emphysema, Atelectasis, Consolidation"
+train_3958,2,4,"Arterial wall calcification, Emphysema, Atelectasis, Mosaic attenuation pattern"
+train_4164,1,4,"Atelectasis, Lung nodule, Lung opacity, Consolidation"
+train_4395,2,1,Lung opacity
+train_4689,2,10,"Arterial wall calcification, Cardiomegaly, Pericardial effusion, Coronary artery wall calcification, Hiatal hernia, Emphysema, Atelectasis, Lung nodule, Lung opacity, Pulmonary fibrotic sequela"
+train_4813,2,5,"Cardiomegaly, Coronary artery wall calcification, Hiatal hernia, Lymphadenopathy, Consolidation"
+train_5035,2,2,"Lymphadenopathy, Lung nodule"
+train_5259,2,0,
+train_672,2,1,Hiatal hernia
+train_1102,2,1,Lung nodule
+train_1353,2,2,"Atelectasis, Lung opacity"
+train_1538,2,2,"Lymphadenopathy, Mosaic attenuation pattern"
+train_1708,8,12,"Medical material, Arterial wall calcification, Coronary artery wall calcification, Lymphadenopathy, Emphysema, Lung nodule, Lung opacity, Pulmonary fibrotic sequela, Pleural effusion, Peribronchial thickening, Consolidation, Interlobular septal thickening"
+train_1895,2,1,Pulmonary fibrotic sequela
+train_2285,2,3,"Lung nodule, Pulmonary fibrotic sequela, Peribronchial thickening"
+train_2635,2,2,"Lung opacity, Consolidation"
+train_3049,2,2,"Lymphadenopathy, Lung opacity"
+train_3287,2,2,"Coronary artery wall calcification, Pulmonary fibrotic sequela"
+train_3383,2,3,"Atelectasis, Lung nodule, Lung opacity"
+train_3608,2,3,"Lymphadenopathy, Emphysema, Lung nodule"
+train_3963,14,15,"Medical material, Arterial wall calcification, Cardiomegaly, Coronary artery wall calcification, Lymphadenopathy, Emphysema, Atelectasis, Lung nodule, Lung opacity, Pulmonary fibrotic sequela, Pleural effusion, Mosaic attenuation pattern, Peribronchial thickening, Consolidation, Interlobular septal thickening"
+train_4210,2,1,Lymphadenopathy
+train_4449,2,13,"Medical material, Arterial wall calcification, Cardiomegaly, Coronary artery wall calcification, Lymphadenopathy, Emphysema, Atelectasis, Lung nodule, Lung opacity, Pulmonary fibrotic sequela, Pleural effusion, Peribronchial thickening, Interlobular septal thickening"
+train_469,2,6,"Medical material, Arterial wall calcification, Coronary artery wall calcification, Lymphadenopathy, Lung nodule, Pulmonary fibrotic sequela"
+train_4824,2,1,Lung nodule
+train_5048,1,2,"Emphysema, Lung opacity"
+train_5278,2,1,Lung opacity
+train_715,1,4,"Arterial wall calcification, Coronary artery wall calcification, Hiatal hernia, Pulmonary fibrotic sequela"
+train_1166,2,9,"Arterial wall calcification, Cardiomegaly, Coronary artery wall calcification, Emphysema, Atelectasis, Lung nodule, Pulmonary fibrotic sequela, Pleural effusion, Consolidation"
+train_1373,2,6,"Arterial wall calcification, Cardiomegaly, Coronary artery wall calcification, Hiatal hernia, Lung nodule, Pleural effusion"
+train_157,3,2,"Lung nodule, Lung opacity"
+train_1712,3,12,"Medical material, Arterial wall calcification, Cardiomegaly, Coronary artery wall calcification, Lymphadenopathy, Atelectasis, Lung nodule, Lung opacity, Pulmonary fibrotic sequela, Pleural effusion, Bronchiectasis, Interlobular septal thickening"
+train_2,2,5,"Arterial wall calcification, Emphysema, Atelectasis, Lung nodule, Peribronchial thickening"
+train_2325,2,2,"Lung nodule, Mosaic attenuation pattern"
+train_2713,2,6,"Arterial wall calcification, Coronary artery wall calcification, Lung nodule, Mosaic attenuation pattern, Peribronchial thickening, Bronchiectasis"
+train_3081,2,11,"Arterial wall calcification, Pericardial effusion, Coronary artery wall calcification, Hiatal hernia, Lymphadenopathy, Emphysema, Lung nodule, Lung opacity, Pulmonary fibrotic sequela, Consolidation, Interlobular septal thickening"
+train_3295,2,5,"Arterial wall calcification, Coronary artery wall calcification, Emphysema, Atelectasis, Pulmonary fibrotic sequela"
+train_3387,2,6,"Arterial wall calcification, Cardiomegaly, Coronary artery wall calcification, Lung nodule, Pleural effusion, Consolidation"
+train_3627,6,5,"Medical material, Lymphadenopathy, Atelectasis, Lung nodule, Lung opacity"
+train_3965,1,0,
+train_4257,2,4,"Hiatal hernia, Atelectasis, Pulmonary fibrotic sequela, Mosaic attenuation pattern"
+train_4474,2,4,"Arterial wall calcification, Coronary artery wall calcification, Atelectasis, Lung nodule"
+train_4690,2,1,Pulmonary fibrotic sequela
+train_4854,2,4,"Lymphadenopathy, Lung nodule, Lung opacity, Consolidation"
+train_5063,2,4,"Lymphadenopathy, Emphysema, Lung nodule, Peribronchial thickening"
+train_5289,1,5,"Medical material, Lung opacity, Pleural effusion, Peribronchial thickening, Consolidation"
+train_733,8,14,"Arterial wall calcification, Cardiomegaly, Pericardial effusion, Hiatal hernia, Lymphadenopathy, Atelectasis, Lung nodule, Lung opacity, Pulmonary fibrotic sequela, Pleural effusion, Mosaic attenuation pattern, Consolidation, Bronchiectasis, Interlobular septal thickening"
+train_1211,2,7,"Medical material, Arterial wall calcification, Cardiomegaly, Coronary artery wall calcification, Hiatal hernia, Emphysema, Pulmonary fibrotic sequela"
+train_1382,2,7,"Arterial wall calcification, Pericardial effusion, Coronary artery wall calcification, Atelectasis, Lung opacity, Pleural effusion, Mosaic attenuation pattern"
+train_1573,2,0,
+train_1764,2,6,"Medical material, Pericardial effusion, Lymphadenopathy, Lung opacity, Pleural effusion, Interlobular septal thickening"
+train_2008,2,4,"Lymphadenopathy, Atelectasis, Lung opacity, Interlobular septal thickening"
+train_2439,2,0,
+train_2729,2,6,"Medical material, Atelectasis, Lung nodule, Lung opacity, Pleural effusion, Consolidation"
+train_3105,2,7,"Arterial wall calcification, Pericardial effusion, Coronary artery wall calcification, Lymphadenopathy, Emphysema, Pleural effusion, Consolidation"
+train_3298,2,4,"Arterial wall calcification, Cardiomegaly, Coronary artery wall calcification, Atelectasis"
+train_3440,2,2,"Lung nodule, Pulmonary fibrotic sequela"
+train_375,2,0,
+train_4015,2,7,"Arterial wall calcification, Emphysema, Atelectasis, Lung nodule, Lung opacity, Peribronchial thickening, Bronchiectasis"
+train_4266,4,2,"Arterial wall calcification, Lymphadenopathy"
+train_45,2,6,"Arterial wall calcification, Coronary artery wall calcification, Emphysema, Lung opacity, Pleural effusion, Consolidation"
+train_4707,2,3,"Hiatal hernia, Lung nodule, Lung opacity"
+train_4862,2,5,"Hiatal hernia, Lung nodule, Lung opacity, Bronchiectasis, Interlobular septal thickening"
+train_511,2,2,"Lung nodule, Consolidation"
+train_5294,2,2,"Lung nodule, Lung opacity"
+train_772,2,2,"Lymphadenopathy, Lung nodule"
+train_1257,2,6,"Medical material, Arterial wall calcification, Coronary artery wall calcification, Hiatal hernia, Lung nodule, Pulmonary fibrotic sequela"
+train_141,2,3,"Coronary artery wall calcification, Lymphadenopathy, Lung opacity"
+train_1588,2,2,"Emphysema, Pulmonary fibrotic sequela"
+train_1774,2,3,"Hiatal hernia, Lung nodule, Lung opacity"
+train_2017,4,7,"Arterial wall calcification, Coronary artery wall calcification, Lymphadenopathy, Emphysema, Atelectasis, Pleural effusion, Consolidation"
+train_2468,2,2,"Lung nodule, Pulmonary fibrotic sequela"
+train_283,2,3,"Arterial wall calcification, Atelectasis, Mosaic attenuation pattern"
+train_3136,2,2,"Hiatal hernia, Lung nodule"
+train_3313,2,1,Lung nodule
+train_3445,2,5,"Arterial wall calcification, Coronary artery wall calcification, Lung nodule, Lung opacity, Peribronchial thickening"
+train_3804,2,0,
+train_4035,2,2,"Lung nodule, Lung opacity"
+train_4274,2,0,
+train_456,4,1,Lung opacity
+train_4727,2,1,Lung nodule
+train_4884,2,3,"Lymphadenopathy, Lung opacity, Consolidation"
+train_5154,2,5,"Arterial wall calcification, Coronary artery wall calcification, Hiatal hernia, Lymphadenopathy, Lung opacity"
+train_5302,2,4,"Arterial wall calcification, Cardiomegaly, Coronary artery wall calcification, Atelectasis"
+train_841,2,4,"Medical material, Emphysema, Atelectasis, Lung nodule"
+train_1269,2,2,"Lung opacity, Interlobular septal thickening"
+train_1413,5,3,"Lymphadenopathy, Lung nodule, Lung opacity"
+train_1603,2,1,Coronary artery wall calcification
+train_1775,2,9,"Arterial wall calcification, Pericardial effusion, Coronary artery wall calcification, Hiatal hernia, Lymphadenopathy, Emphysema, Lung nodule, Lung opacity, Pulmonary fibrotic sequela"
+train_205,2,1,Lung nodule
+train_250,2,5,"Cardiomegaly, Emphysema, Atelectasis, Lung opacity, Pulmonary fibrotic sequela"
+train_2840,5,8,"Arterial wall calcification, Lymphadenopathy, Emphysema, Atelectasis, Lung nodule, Lung opacity, Pulmonary fibrotic sequela, Consolidation"
+train_316,2,5,"Arterial wall calcification, Coronary artery wall calcification, Emphysema, Atelectasis, Lung nodule"
+train_3329,2,7,"Arterial wall calcification, Coronary artery wall calcification, Hiatal hernia, Lymphadenopathy, Atelectasis, Lung nodule, Lung opacity"
+train_346,2,5,"Lymphadenopathy, Lung nodule, Lung opacity, Peribronchial thickening, Bronchiectasis"
+train_388,2,2,"Emphysema, Atelectasis"
+train_4105,4,4,"Lymphadenopathy, Emphysema, Lung opacity, Consolidation"
+train_4284,2,3,"Lung nodule, Lung opacity, Consolidation"
+train_4625,2,4,"Atelectasis, Lung nodule, Peribronchial thickening, Bronchiectasis"
+train_4733,2,8,"Medical material, Arterial wall calcification, Cardiomegaly, Coronary artery wall calcification, Lymphadenopathy, Lung opacity, Pleural effusion, Interlobular septal thickening"
+train_4954,2,8,"Arterial wall calcification, Coronary artery wall calcification, Lymphadenopathy, Emphysema, Lung nodule, Peribronchial thickening, Consolidation, Bronchiectasis"
+train_5221,2,1,Pulmonary fibrotic sequela
+train_5311,6,5,"Coronary artery wall calcification, Lung nodule, Lung opacity, Consolidation, Interlobular septal thickening"
+train_920,2,7,"Arterial wall calcification, Cardiomegaly, Coronary artery wall calcification, Atelectasis, Lung nodule, Lung opacity, Mosaic attenuation pattern"
+train_1278,2,4,"Medical material, Atelectasis, Lung opacity, Pleural effusion"
+train_1444,2,5,"Arterial wall calcification, Coronary artery wall calcification, Emphysema, Peribronchial thickening, Bronchiectasis"
+train_1616,2,1,Hiatal hernia
+train_178,2,6,"Cardiomegaly, Coronary artery wall calcification, Lymphadenopathy, Atelectasis, Pleural effusion, Interlobular septal thickening"
+train_2125,2,0,
+train_2527,2,5,"Arterial wall calcification, Coronary artery wall calcification, Hiatal hernia, Lymphadenopathy, Lung opacity"
+train_2872,2,1,Lung opacity
+train_3237,2,3,"Lymphadenopathy, Lung opacity, Pulmonary fibrotic sequela"
+train_3335,2,4,"Lymphadenopathy, Lung nodule, Lung opacity, Pulmonary fibrotic sequela"
+train_3473,2,1,Arterial wall calcification
+train_395,2,0,
+train_4106,2,1,Lung nodule
+train_4355,2,3,"Arterial wall calcification, Hiatal hernia, Lymphadenopathy"
+train_4673,2,4,"Lymphadenopathy, Atelectasis, Lung nodule, Lung opacity"
+train_4796,2,10,"Medical material, Arterial wall calcification, Coronary artery wall calcification, Hiatal hernia, Lymphadenopathy, Emphysema, Atelectasis, Lung nodule, Lung opacity, Peribronchial thickening"
+train_5004,2,2,"Lung nodule, Lung opacity"
+train_5245,4,5,"Medical material, Coronary artery wall calcification, Pulmonary fibrotic sequela, Mosaic attenuation pattern, Peribronchial thickening"
+train_664,2,3,"Arterial wall calcification, Emphysema, Lung nodule"
+train_1281,6,6,"Lymphadenopathy, Emphysema, Lung nodule, Lung opacity, Pulmonary fibrotic sequela, Bronchiectasis"
+train_1459,5,5,"Medical material, Atelectasis, Lung nodule, Lung opacity, Pleural effusion"
+train_165,2,6,"Arterial wall calcification, Lymphadenopathy, Lung nodule, Lung opacity, Consolidation, Interlobular septal thickening"
+train_1823,4,1,Lung opacity
+train_2147,2,3,"Arterial wall calcification, Lung nodule, Lung opacity"
+train_2543,1,4,"Arterial wall calcification, Atelectasis, Lung nodule, Pulmonary fibrotic sequela"
+train_295,2,5,"Lymphadenopathy, Emphysema, Atelectasis, Lung nodule, Pulmonary fibrotic sequela"
+train_3239,2,2,"Lung opacity, Consolidation"
+train_3369,2,2,"Lung opacity, Consolidation"
+train_3527,2,2,"Atelectasis, Lung opacity"
+train_3954,1,1,Lung nodule
+train_4154,2,1,Lung nodule
+train_4363,4,7,"Medical material, Hiatal hernia, Lymphadenopathy, Atelectasis, Lung nodule, Lung opacity, Pulmonary fibrotic sequela"
+train_4679,7,8,"Arterial wall calcification, Cardiomegaly, Coronary artery wall calcification, Lymphadenopathy, Atelectasis, Lung opacity, Mosaic attenuation pattern, Consolidation"
+train_4799,2,1,Lung nodule
+train_502,1,6,"Cardiomegaly, Hiatal hernia, Lung nodule, Pulmonary fibrotic sequela, Mosaic attenuation pattern, Consolidation"
+train_5257,2,0,
+train_671,2,2,"Arterial wall calcification, Atelectasis"

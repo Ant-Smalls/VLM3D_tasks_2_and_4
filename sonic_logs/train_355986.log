@@ -1,0 +1,83 @@
+Current working dir: /home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge
+2026-04-23 12:59:42 - __main__ - INFO - Loading test split from /scratch/23225831/vlm3d_challenge/data/sampled_train_fixed/subset_manifest/test_split.json
+2026-04-23 12:59:42 - __main__ - INFO - Test samples: 15
+2026-04-23 12:59:42 - __main__ - INFO - Building test dataloader...
+/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/venv/lib64/python3.9/site-packages/monai/utils/deprecate_utils.py:321: FutureWarning: monai.transforms.spatial.dictionary Orientationd.__init__:labels: Current default value of argument `labels=(('L', 'R'), ('P', 'A'), ('I', 'S'))` was changed in version None from `labels=(('L', 'R'), ('P', 'A'), ('I', 'S'))` to `labels=None`. Default value changed to None meaning that the transform now uses the 'space' of a meta-tensor, if applicable, to determine appropriate axis labels.
+  warn_deprecated(argname, msg, warning_category)
+2026-04-23 12:59:42 - __main__ - INFO - Loading model from src/outputs/checkpoints/best-epoch=11-val_mean_auc=0.6067.ckpt
+2026-04-23 12:59:43 - modules.encoder - INFO - Loading DinoV2 encoder from local directory: src/pretrained_encoders/dinov2-small...
+2026-04-23 12:59:43 - modules.encoder - INFO - DinoV2 encoder loaded and frozen (768-dim embeddings)
+2026-04-23 12:59:43 - __main__ - INFO - Restored thresholds: [0.3499999940395355, 0.3499999940395355, 0.30000001192092896, 0.15000000596046448, 0.5, 0.699999988079071, 0.05000000074505806, 0.5, 0.4000000059604645, 0.25, 0.3499999940395355, 0.30000001192092896, 0.5, 0.5, 0.30000001192092896, 0.550000011920929, 0.05000000074505806, 0.3499999940395355]
+💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+You are using a CUDA device ('NVIDIA L40S') that has Tensor Cores. To properly utilize them, you should set `torch.set_float32_matmul_precision('medium' | 'high')` which will trade-off precision for performance. For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+SLURM auto-requeueing enabled. Setting signal handlers.
+Testing: |          | 0/? [00:00<?, ?it/s]Testing: |          | 0/? [00:00<?, ?it/s]Testing DataLoader 0:   0%|          | 0/4 [00:00<?, ?it/s]Testing DataLoader 0:  25%|██▌       | 1/4 [00:00<00:01,  2.57it/s]Testing DataLoader 0:  50%|█████     | 2/4 [00:01<00:01,  1.70it/s]Testing DataLoader 0:  75%|███████▌  | 3/4 [00:15<00:05,  0.19it/s]Testing DataLoader 0: 100%|██████████| 4/4 [00:15<00:00,  0.26it/s]2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Class                                          AUC      AP  n_pos
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Cardiomegaly                                 0.714   0.200      1
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Lung opacity                                 0.714   0.771      8
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Arterial wall calcification                  0.694   0.738      3
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Coronary artery wall calcification           0.639   0.322      3
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Atelectasis                                  0.636   0.415      4
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Bronchiectasis                               0.577   0.208      2
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Pulmonary fibrotic sequela                   0.523   0.335      4
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Medical material                             0.500   0.125      1
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Emphysema                                    0.500   0.183      2
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Mosaic attenuation pattern                   0.500   0.125      1
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Peribronchial thickening                     0.500   0.283      3
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Lymphadenopathy                              0.472   0.310      3
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Consolidation                                0.429   0.111      1
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Interlobular septal thickening               0.357   0.100      1
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Lung nodule                                  0.333   0.378      6
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Hiatal hernia                                0.306   0.206      3
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Pericardial effusion                           N/A     N/A      0
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - Pleural effusion                               N/A     N/A      0
+2026-04-23 13:00:16 - modules.multiabnormality_classification_model - INFO - MEAN (valid only)                            0.525   0.301     46
+Testing DataLoader 0: 100%|██████████| 4/4 [00:15<00:00,  0.26it/s]2026-04-23 13:00:16 - __main__ - INFO - Test results: [{'test_loss': 0.9150130748748779, 'test_auc/Medical material': 0.5, 'test_auc/Arterial wall calcification': 0.6944444179534912, 'test_auc/Cardiomegaly': 0.7142857313156128, 'test_auc/Coronary artery wall calcification': 0.6388888955116272, 'test_auc/Hiatal hernia': 0.3055555522441864, 'test_auc/Lymphadenopathy': 0.4722222089767456, 'test_auc/Emphysema': 0.5, 'test_auc/Atelectasis': 0.6363636255264282, 'test_auc/Lung nodule': 0.3333333432674408, 'test_auc/Lung opacity': 0.7142857313156128, 'test_auc/Pulmonary fibrotic sequela': 0.5227272510528564, 'test_auc/Mosaic attenuation pattern': 0.5, 'test_auc/Peribronchial thickening': 0.5, 'test_auc/Consolidation': 0.4285714328289032, 'test_auc/Bronchiectasis': 0.5769230723381042, 'test_auc/Interlobular septal thickening': 0.3571428656578064, 'test_ap/Medical material': 0.125, 'test_ap/Arterial wall calcification': 0.738095223903656, 'test_ap/Cardiomegaly': 0.20000000298023224, 'test_ap/Coronary artery wall calcification': 0.3222222328186035, 'test_ap/Hiatal hernia': 0.20604395866394043, 'test_ap/Lymphadenopathy': 0.3102564215660095, 'test_ap/Emphysema': 0.18333333730697632, 'test_ap/Atelectasis': 0.4154762029647827, 'test_ap/Lung nodule': 0.3778832256793976, 'test_ap/Lung opacity': 0.7709144949913025, 'test_ap/Pulmonary fibrotic sequela': 0.3348484933376312, 'test_ap/Mosaic attenuation pattern': 0.125, 'test_ap/Peribronchial thickening': 0.28333333134651184, 'test_ap/Consolidation': 0.1111111119389534, 'test_ap/Bronchiectasis': 0.2083333283662796, 'test_ap/Interlobular septal thickening': 0.10000000149011612, 'test_mean_auc': 0.5246714949607849, 'test_mean_ap': 0.30074071884155273, 'test_accuracy': 0.529629647731781, 'test_f1': 0.34196892380714417, 'test_precision': 0.22448979318141937, 'test_recall': 0.717391312122345, 'test_hamming_loss': 0.4703703820705414}]
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                Test metric                               DataLoader 0
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+               test_accuracy                            0.529629647731781
+    test_ap/Arterial wall calcification                 0.738095223903656
+            test_ap/Atelectasis                        0.4154762029647827
+          test_ap/Bronchiectasis                       0.2083333283662796
+           test_ap/Cardiomegaly                        0.20000000298023224
+           test_ap/Consolidation                       0.1111111119389534
+test_ap/Coronary artery wall calcification             0.3222222328186035
+             test_ap/Emphysema                         0.18333333730697632
+           test_ap/Hiatal hernia                       0.20604395866394043
+  test_ap/Interlobular septal thickening               0.10000000149011612
+            test_ap/Lung nodule                        0.3778832256793976
+           test_ap/Lung opacity                        0.7709144949913025
+          test_ap/Lymphadenopathy                      0.3102564215660095
+         test_ap/Medical material                             0.125
+    test_ap/Mosaic attenuation pattern                        0.125
+     test_ap/Peribronchial thickening                  0.28333333134651184
+    test_ap/Pulmonary fibrotic sequela                 0.3348484933376312
+   test_auc/Arterial wall calcification                0.6944444179534912
+           test_auc/Atelectasis                        0.6363636255264282
+          test_auc/Bronchiectasis                      0.5769230723381042
+           test_auc/Cardiomegaly                       0.7142857313156128
+          test_auc/Consolidation                       0.4285714328289032
+test_auc/Coronary artery wall calcification            0.6388888955116272
+            test_auc/Emphysema                                 0.5
+          test_auc/Hiatal hernia                       0.3055555522441864
+  test_auc/Interlobular septal thickening              0.3571428656578064
+           test_auc/Lung nodule                        0.3333333432674408
+           test_auc/Lung opacity                       0.7142857313156128
+         test_auc/Lymphadenopathy                      0.4722222089767456
+         test_auc/Medical material                             0.5
+    test_auc/Mosaic attenuation pattern                        0.5
+     test_auc/Peribronchial thickening                         0.5
+    test_auc/Pulmonary fibrotic sequela                0.5227272510528564
+                  test_f1                              0.34196892380714417
+             test_hamming_loss                         0.4703703820705414
+                 test_loss                             0.9150130748748779
+               test_mean_ap                            0.30074071884155273
+               test_mean_auc                           0.5246714949607849
+              test_precision                           0.22448979318141937
+                test_recall                             0.717391312122345
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Testing job completed

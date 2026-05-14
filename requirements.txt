@@ -1,0 +1,15 @@
+torch>=2.2.0
+torchvision
+torchmetrics
+monai
+nibabel
+SimpleITK
+pandas
+numpy
+scikit-learn
+peft
+jupyter
+matplotlib
+pytorch-lightning
+transformers<4.47
+tensorboard
