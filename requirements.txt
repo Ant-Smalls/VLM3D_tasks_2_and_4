@@ -7,6 +7,7 @@ SimpleITK
 pandas
 numpy
 scikit-learn
+iterative-stratification
 peft
 jupyter
 matplotlib

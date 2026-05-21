@@ -18,6 +18,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.data_loader import create_subset_manifest
 from modules.data_loader import create_train_val_test_splits
+from modules.data_loader import create_stratified_kfold_splits
 from modules.transforms import get_train_transforms, get_valid_transforms
 from modules.multiabnormality_classification_model import MultiAbnormalityClassifier
 
@@ -50,6 +51,10 @@ def parse_args():
     parser.add_argument('--encoder_type', type=str, default='dinov2',
                     choices=['dinov2', 'dinov3'],
                     help='Type of encoder to use')
+    # K-fold settings 
+    parser.add_argument('--use_kfold', action='store_true', help='Use multilabel stratified k-fold cross validation')
+    parser.add_argument('--k_folds', type=int, default=5, help='Number of folds for cross validation')
+    parser.add_argument('--fold', type=int, default=0, help='Which fold to train (0 to k_folds-1)')
     
     # additional settings
     parser.add_argument('--seed', type=int, default=42)
@@ -87,37 +92,66 @@ def prepare_data(args):
             output_json_path=manifest_path
         )
     
-    # set paths for the train/val/test splits and check if they exist
-    train_split_path = os.path.join(manifest_dir, 'train_split.json')
-    val_split_path = os.path.join(manifest_dir, 'val_split.json')
-    test_split_path = os.path.join(manifest_dir, 'test_split.json')
-    
-    splits_exist = all([
-        os.path.exists(train_split_path),
-        os.path.exists(val_split_path),
-        os.path.exists(test_split_path)
-    ])
+    if args.use_kfold:
+        folds_exist = all([
+            os.path.exists(os.path.join(manifest_dir, f'fold_{i}', 'train_split.json'))
+            for i in range(args.k_folds)
+        ])
 
-    # use the existing splits if they exist otherwise create new ones with the create_train_val_test_splits function
-    if splits_exist:
-        logger.info(f"Using existing splits from {manifest_dir}")
-    else:
-        logger.info(f"Creating new train/val/test splits...")
-        create_train_val_test_splits(
-            manifest_path=manifest_path,
-            output_dir=manifest_dir,
-            train_ratio=args.train_split,
-            seed=args.seed
-        )
+        if folds_exist:
+            logger.info(f"Using existing {args.k_folds}-fold splits")
+        else:
+            logger.info(f"Creating new {args.k_folds}-fold splits")
+            create_stratified_kfold_splits(
+                manifest_path=manifest_path,
+                output_dir=manifest_dir,
+                k_folds=args.k_folds,
+                seed=args.seed
+            )
+        
+        # load specific fold requested by the user 
+        train_split_path = os.path.join(manifest_dir, f'fold_{args.fold}', 'train_split.json')
+        validation_split_path = os.path.join(manifest_dir, f'fold_{args.fold}', 'val_split.json')
+
+        with open(train_split_path, 'r') as f:
+            train_data = json.load(f)
+        with open(validation_split_path, 'r') as f:
+            val_data = json.load(f)
+        
+        test_data = val_data
     
-    # load the train/val/test splits and return them 
-    logger.info("Loading train/val/test data...")
-    with open(train_split_path, 'r') as f:
-        train_data = json.load(f)
-    with open(val_split_path, 'r') as f:
-        val_data = json.load(f)
-    with open(test_split_path, 'r') as f:
-        test_data = json.load(f)
+    else:
+        # set paths for the train/val/test splits and check if they exist
+        train_split_path = os.path.join(manifest_dir, 'train_split.json')
+        val_split_path = os.path.join(manifest_dir, 'val_split.json')
+        test_split_path = os.path.join(manifest_dir, 'test_split.json')
+        
+        splits_exist = all([
+            os.path.exists(train_split_path),
+            os.path.exists(val_split_path),
+            os.path.exists(test_split_path)
+        ])
+
+        # use the existing splits if they exist otherwise create new ones with the create_train_val_test_splits function
+        if splits_exist:
+            logger.info(f"Using existing splits from {manifest_dir}")
+        else:
+            logger.info(f"Creating new train/val/test splits...")
+            create_train_val_test_splits(
+                manifest_path=manifest_path,
+                output_dir=manifest_dir,
+                train_ratio=args.train_split,
+                seed=args.seed
+            )
+        
+        # load the train/val/test splits and return them 
+        logger.info("Loading train/val/test data...")
+        with open(train_split_path, 'r') as f:
+            train_data = json.load(f)
+        with open(val_split_path, 'r') as f:
+            val_data = json.load(f)
+        with open(test_split_path, 'r') as f:
+            test_data = json.load(f)
     
     logger.info(f"Loaded: Train={len(train_data)}, Val={len(val_data)}, Test={len(test_data)}")
 

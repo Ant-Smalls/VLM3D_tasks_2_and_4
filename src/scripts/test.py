@@ -39,6 +39,9 @@ def parse_args():
     parser.add_argument('--spatial_size', type=int, nargs=3, default=(96, 224, 224))
     parser.add_argument('--pixdim', type=float, nargs=3, default=(1.5, 1.5, 1.5))
 
+    parser.add_argument('--use_kfold', action='store_true', help='Evaluate a specific fold from the k-fold cross validation')
+    parser.add_argument('--fold', type=int, default=0, help='Which fold to evaluate')
+
     return parser.parse_args()
 
 
@@ -73,9 +76,17 @@ def main():
     )
     args = parse_args()
 
-    test_split_path = args.test_split or os.path.join(
-        args.data_dir, 'subset_manifest', 'test_split.json'
-    )
+    if args.test_split:
+        test_split_path = args.test_split
+    elif getattr(args, 'use_kfold', False):
+        test_split_path = os.path.join(
+            args.data_dir, 'subset_manifest', f'fold_{args.fold}', 'val_split.json'
+        )
+    else:
+        test_split_path = os.path.join(
+            args.data_dir, 'subset_manifest', 'test_split.json'
+        )
+
     if not os.path.exists(test_split_path):
         raise FileNotFoundError(
             f"test_split.json not found at {test_split_path}. "

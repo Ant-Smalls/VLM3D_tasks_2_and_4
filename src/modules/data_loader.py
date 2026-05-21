@@ -9,6 +9,8 @@ import random
 import logging
 import SimpleITK as sitk
 import math
+import numpy as np
+from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 
 logger = logging.getLogger(__name__)
 
@@ -209,3 +211,41 @@ def create_train_val_test_splits(manifest_path, output_dir, train_ratio=0.8, see
     
     logger.info(f"Created splits: Train = {len(train_data)}, Val = {len(val_data)}, Test = {len(test_data)}")
     logger.info(f"Saved splits to {output_dir}")
+
+def create_stratified_kfold_splits(manifest_path, output_dir, k_folds=5, seed=42):
+    """
+    Create multilabel stratified k-fold splits to maintain class balance for the folds for cross valdiation
+    Args:
+        manifest_path: Path to subset_manifest.json
+        output_dir: Directory where splits will be saved
+        k: Number of folds (default 5)
+        seed: Random seed for reproducibility
+    Returns:
+        None
+    """
+
+    with open(manifest_path, 'r') as f:
+        all_data = json.load(f)
+    
+    # extract the 18-class label array for stratification
+    labels = np.array([item['label'] for item in all_data])
+    features = np.zeros((len(all_data), 1))
+
+    mlskf = MultilabelStratifiedKFold(n_splits=k_folds, shuffle=True, random_state=seed)
+
+    for fold, (train_index, validation_index) in enumerate(mlskf.split(features, labels)):
+        fold_dir = os.path.join(output_dir, f'fold_{fold}')
+        os.makedirs(fold_dir, exist_ok=True)
+
+        # map the stratified indices to the original patient data directories 
+        train_data = [all_data[i] for i in train_index]
+        validation_data = [all_data[i] for i in validation_index]
+        train_path = os.path.join(fold_dir, 'train_split.json')
+        validation_path = os.path.join(fold_dir, 'val_split.json')
+
+        with open(train_path, 'w') as f:
+            json.dump(train_data, f, indent=4)
+        with open(validation_path, 'w') as f:
+            json.dump(validation_data, f, indent=4)
+
+        logger.info(f"Created stratified fold {fold}: Train = {len(train_data)}, Validation = {len(validation_data)}")

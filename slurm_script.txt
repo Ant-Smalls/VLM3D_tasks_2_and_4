@@ -1,3 +1,7 @@
+-----------------------------------------------------------
+Traint slurm Script - train/test/val split:
+-----------------------------------------------------------
+
 #!/bin/bash -l
 #SBATCH --job-name=vlm3d_train
 # Specify number of nodes
@@ -47,6 +51,63 @@ python3 src/scripts/train.py \
 
 echo "Training job completed"
 
+
+
+-----------------------------------------------------------
+Traint slurm Script - k-fold cross validation:
+-----------------------------------------------------------
+
+#!/bin/bash -l
+#SBATCH --job-name=vlm3d_train
+# Specify number of nodes
+#SBATCH -N 1
+# Specify the GPU partition
+#SBATCH --partition=gpu
+# Request 1 GPU
+#SBATCH --gres=gpu:1
+# Specify number of tasks/cores per node
+#SBATCH --ntasks-per-node=4
+# Specify the run time
+#SBATCH -t 3:00:00
+# Set to email at start, end and failed jobs
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=user@email.com
+# Output logs
+#SBATCH --output=logs/train_%j.log
+
+cd /home/people/{account_number}/path_to_local_VLM3D_challenge
+
+echo "Current working dir: $(pwd)"
+
+# Activate the virtual environment
+source venv/bin/activate
+
+# Set paths
+DATA_DIR="/scratch/{account_number}/path_to_root_directory_of_data/data/sampled_train_fixed"
+LABELS_CSV="src/scripts/download_data/training_data_labels/train_labels.csv"
+ENCODER_DIR="src/pretrained_encoders/dinov2-small"
+OUTPUT_DIR="src/outputs"
+
+# Create output directory if it doesn't exist
+mkdir -p $OUTPUT_DIR
+
+# Run training script
+python3 src/scripts/train.py \
+    --data_dir $DATA_DIR \
+    --labels_csv $LABELS_CSV \
+    --encoder_dir $ENCODER_DIR \
+    --output_dir $OUTPUT_DIR \
+    --max_epochs 20 \
+    --batch_size 4 \
+    --num_workers 2 \
+    --dropout 0.3 \
+    --encoder_type dinov2 \
+    --seed 42 \
+    --use_kfold \
+    --k_folds 5 \
+    --fold 0
+
+echo "Training job completed"
 
 
 
