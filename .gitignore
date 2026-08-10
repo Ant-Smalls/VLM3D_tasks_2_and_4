@@ -1,0 +1,9 @@
+.agents
+docs
+AGENTS.md
+exclude-list.txt
+skills-lock.json
+exclude_300_TrainingFile.csv
+.scratch
+DS_store
+src/.DS_Store

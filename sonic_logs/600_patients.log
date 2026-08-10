@@ -1,0 +1,150 @@
+
+Training Results:
+
+2026-08-08 02:31:56 - __main__ - INFO - Preparing data...
+2026-08-08 02:31:56 - __main__ - INFO - Creating new manifest at /scratch/23225831/vlm3d_challenge/data/sampled_train_fixed/subset_manifest/subset_manifest.json
+2026-08-08 02:31:57 - modules.data_loader - INFO - Found 600 patient directories
+2026-08-08 02:35:23 - modules.data_loader - INFO - Total best volumes collected: 600
+2026-08-08 02:35:23 - modules.data_loader - INFO - Created manifest with 600 patients at /scratch/23225831/vlm3d_challenge/data/sampled_train_fixed/subset_manifest/subset_manifest.json
+2026-08-08 02:35:23 - __main__ - INFO - Creating new train/val/test splits...
+2026-08-08 02:35:23 - modules.data_loader - INFO - Created splits: Train = 480, Val = 60, Test = 60
+2026-08-08 02:35:23 - modules.data_loader - INFO - Saved splits to /scratch/23225831/vlm3d_challenge/data/sampled_train_fixed/subset_manifest
+2026-08-08 02:35:23 - __main__ - INFO - Loading train/val/test data...
+2026-08-08 02:35:23 - __main__ - INFO - Loaded: Train=480, Val=60, Test=60
+2026-08-08 02:35:23 - __main__ - INFO - Creating dataloaders...
+/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/venv/lib64/python3.9/site-packages/monai/utils/deprecate_utils.py:321: FutureWarning: monai.transforms.spatial.dictionary Orientationd.__init__:labels: Current default value of argument `labels=(('L', 'R'), ('P', 'A'), ('I', 'S'))` was changed in version None from `labels=(('L', 'R'), ('P', 'A'), ('I', 'S'))` to `labels=None`. Default value changed to None meaning that the transform now uses the 'space' of a meta-tensor, if applicable, to determine appropriate axis labels.
+  warn_deprecated(argname, msg, warning_category)
+2026-08-08 02:35:23 - __main__ - INFO - Initializing model...
+2026-08-08 02:35:23 - __main__ - INFO - Position weights: tensor([5.0000, 2.5036, 5.0000, 5.0000, 3.1379, 5.0000, 3.2478, 4.5814, 3.4037,
+        1.3077, 1.5946, 2.8710, 5.0000, 5.0000, 5.0000, 5.0000, 5.0000, 5.0000])
+2026-08-08 02:35:23 - __main__ - INFO - Min weight: 1.31, Max weight: 5.00, Mean: 4.04
+2026-08-08 02:35:23 - modules.encoder - INFO - Loading DinoV2 encoder from local directory: src/pretrained_encoders/dinov2-small...
+2026-08-08 02:35:24 - modules.encoder - INFO - DinoV2 encoder loaded and frozen (768-dim embeddings)
+2026-08-08 02:35:24 - __main__ - INFO - Creating trainer...
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+2026-08-08 02:35:24 - __main__ - INFO - Starting training...
+You are using a CUDA device ('NVIDIA L40S') that has Tensor Cores. To properly utilize them, you should set `torch.set_float32_matmul_precision('medium' | 'high')` which will trade-off precision for performance. For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
+/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/venv/lib64/python3.9/site-packages/pytorch_lightning/callbacks/model_checkpoint.py:881: Checkpoint directory /home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints exists and is not empty.
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+
+  | Name      | Type                  | Params | Mode  | FLOPs
+--------------------------------------------------------------------
+0 | encoder   | DinoV2Encoder         | 22.1 M | train | 0    
+1 | head      | GatedAttentionMILHead | 213 K  | train | 0    
+2 | criterion | BCEWithLogitsLoss     | 0      | train | 0    
+--------------------------------------------------------------------
+213 K     Trainable params
+22.1 M    Non-trainable params
+22.3 M    Total params
+89.078    Total estimated model params size (MB)
+8         Modules in train mode
+236       Modules in eval mode
+0         Total Flops
+ Could not log computational graph to TensorBoard: The `model.example_input_array` attribute is not set or `input_array` was not given.
+SLURM auto-requeueing enabled. Setting signal handlers.
+Found 236 module(s) in eval mode at the start of training. This may lead to unexpected behavior during training. If this is intentional, you can ignore this warning.
+Epoch 0, global step 120: 'val_mean_auc' reached 0.61462 (best 0.61462), saving model to '/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=00-val_mean_auc=0.6146.ckpt' as top 1
+Epoch 1, global step 240: 'val_mean_auc' reached 0.64632 (best 0.64632), saving model to '/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=01-val_mean_auc=0.6463.ckpt' as top 1
+Epoch 2, global step 360: 'val_mean_auc' reached 0.65185 (best 0.65185), saving model to '/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=02-val_mean_auc=0.6519.ckpt' as top 1
+Epoch 3, global step 480: 'val_mean_auc' reached 0.66353 (best 0.66353), saving model to '/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=03-val_mean_auc=0.6635.ckpt' as top 1
+Epoch 4, global step 600: 'val_mean_auc' reached 0.66895 (best 0.66895), saving model to '/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=04-val_mean_auc=0.6689.ckpt' as top 1
+Epoch 5, global step 720: 'val_mean_auc' was not in top 1
+Epoch 6, global step 840: 'val_mean_auc' reached 0.67465 (best 0.67465), saving model to '/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=06-val_mean_auc=0.6747.ckpt' as top 1
+Epoch 7, global step 960: 'val_mean_auc' reached 0.68087 (best 0.68087), saving model to '/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=07-val_mean_auc=0.6809.ckpt' as top 1
+Epoch 8, global step 1080: 'val_mean_auc' reached 0.68364 (best 0.68364), saving model to '/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=08-val_mean_auc=0.6836.ckpt' as top 1
+Epoch 9, global step 1200: 'val_mean_auc' reached 0.68750 (best 0.68750), saving model to '/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=09-val_mean_auc=0.6875.ckpt' as top 1
+Epoch 10, global step 1320: 'val_mean_auc' was not in top 1
+Epoch 11, global step 1440: 'val_mean_auc' was not in top 1
+Epoch 12, global step 1560: 'val_mean_auc' reached 0.69114 (best 0.69114), saving model to '/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=12-val_mean_auc=0.6911.ckpt' as top 1
+Epoch 13, global step 1680: 'val_mean_auc' reached 0.69507 (best 0.69507), saving model to '/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=13-val_mean_auc=0.6951.ckpt' as top 1
+Epoch 14, global step 1800: 'val_mean_auc' was not in top 1
+Epoch 15, global step 1920: 'val_mean_auc' was not in top 1
+Epoch 16, global step 2040: 'val_mean_auc' was not in top 1
+Epoch 17, global step 2160: 'val_mean_auc' was not in top 1
+Epoch 18, global step 2280: 'val_mean_auc' was not in top 1
+Epoch 19, global step 2400: 'val_mean_auc' was not in top 1
+`Trainer.fit` stopped: `max_epochs=20` reached.
+2026-08-08 09:45:01 - __main__ - INFO - Training complete - best checkpoint saved to: /home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=13-val_mean_auc=0.6951.ckpt
+2026-08-08 09:45:01 - __main__ - INFO - Best val_mean_auc: 0.6951
+2026-08-08 09:45:03 - modules.encoder - INFO - Loading DinoV2 encoder from local directory: src/pretrained_encoders/dinov2-small...
+2026-08-08 09:45:03 - modules.encoder - INFO - DinoV2 encoder loaded and frozen (768-dim embeddings)
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/venv/lib64/python3.9/site-packages/pytorch_lightning/loggers/tensorboard.py:195: Could not log computational graph to TensorBoard: The `model.example_input_array` attribute is not set or `input_array` was not given.
+SLURM auto-requeueing enabled. Setting signal handlers.
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Class                                          AUC      AP  n_pos
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Cardiomegaly                                 0.915   0.776     11
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Interlobular septal thickening               0.911   0.392      4
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Coronary artery wall calcification           0.908   0.804     14
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Pleural effusion                             0.900   0.704      7
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Pericardial effusion                         0.881   0.125      1
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Arterial wall calcification                  0.874   0.728     16
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Mosaic attenuation pattern                   0.812   0.418      4
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Pulmonary fibrotic sequela                   0.719   0.412     14
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Atelectasis                                  0.716   0.572     16
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Emphysema                                    0.709   0.513     18
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Peribronchial thickening                     0.694   0.317     10
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Bronchiectasis                               0.629   0.129      5
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Medical material                             0.600   0.294      5
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Lung opacity                                 0.575   0.482     21
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Lymphadenopathy                              0.556   0.371     15
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Consolidation                                0.546   0.168      8
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Hiatal hernia                                0.534   0.255     10
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - Lung nodule                                  0.502   0.411     25
+2026-08-08 09:47:28 - modules.multiabnormality_classification_model - INFO - MEAN (valid only)                            0.721   0.437    204
+
+
+Testing Results:
+Current working dir: /home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge
+Epoch 19: 100%|██████████| 120/120 [21:25<00:00,  0.09it/s, v_num=5, train_loss_step=1.280, val_loss=0.837, val_mean_auc=0.695, val_mean_ap=0.379, val_accuracy=0.636, val_f1=0.459, train_loss_epoch=0.813]
+Testing DataLoader 0: 100%|██████████| 15/15 [02:06<00:00,  0.12it/s]   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                Test metric                               DataLoader 0
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+               test_accuracy                            0.635185182094574
+    test_ap/Arterial wall calcification                0.7279065251350403
+            test_ap/Atelectasis                        0.5715774893760681
+          test_ap/Bronchiectasis                       0.12940853834152222
+           test_ap/Cardiomegaly                        0.7764086723327637
+           test_ap/Consolidation                       0.1680760234594345
+test_ap/Coronary artery wall calcification              0.803894579410553
+             test_ap/Emphysema                         0.5134497284889221
+           test_ap/Hiatal hernia                       0.2549339234828949
+  test_ap/Interlobular septal thickening               0.3921568691730499
+            test_ap/Lung nodule                        0.4106442630290985
+           test_ap/Lung opacity                        0.4820990264415741
+          test_ap/Lymphadenopathy                      0.37106430530548096
+         test_ap/Medical material                      0.29357093572616577
+    test_ap/Mosaic attenuation pattern                  0.417803019285202
+     test_ap/Peribronchial thickening                  0.3171282708644867
+       test_ap/Pericardial effusion                           0.125
+         test_ap/Pleural effusion                       0.704410195350647
+    test_ap/Pulmonary fibrotic sequela                 0.4119393527507782
+   test_auc/Arterial wall calcification                0.8735795617103577
+           test_auc/Atelectasis                        0.7159090638160706
+          test_auc/Bronchiectasis                      0.6290909051895142
+           test_auc/Cardiomegaly                       0.9146567583084106
+          test_auc/Consolidation                       0.5456730723381042
+test_auc/Coronary artery wall calcification            0.9083850979804993
+            test_auc/Emphysema                         0.7089946866035461
+          test_auc/Hiatal hernia                       0.5339999794960022
+  test_auc/Interlobular septal thickening              0.9107142686843872
+           test_auc/Lung nodule                         0.501714289188385
+           test_auc/Lung opacity                       0.5750916004180908
+         test_auc/Lymphadenopathy                      0.5555555820465088
+         test_auc/Medical material                     0.6000000238418579
+    test_auc/Mosaic attenuation pattern                      0.8125
+     test_auc/Peribronchial thickening                 0.6940000057220459
+       test_auc/Pericardial effusion                   0.8813559412956238
+         test_auc/Pleural effusion                     0.9002695679664612
+    test_auc/Pulmonary fibrotic sequela                0.7189440727233887
+                  test_f1                              0.3919753134250641
+             test_hamming_loss                          0.364814817905426
+                 test_loss                             0.8549116849899292
+               test_mean_ap                            0.43730399012565613
+               test_mean_auc                           0.7211352586746216
+              test_precision                           0.28603604435920715
+                test_recall                            0.6225489974021912
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Training job completed
+[23225831@login4 sonic_vlm3d_challenge]$ 
