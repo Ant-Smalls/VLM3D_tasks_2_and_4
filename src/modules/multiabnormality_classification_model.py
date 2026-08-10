@@ -113,6 +113,25 @@ class MultiAbnormalityClassifier(pl.LightningModule):
         logits = self.head(slice_embeddings)
         
         return logits
+
+    @torch.no_grad()
+    def extract_class_embeddings(self, x):
+        """
+        Extract class-specific attention-pooled bag embeddings z.
+
+        Args:
+            x: Input tensor of shape [B, 3, D, H, W]
+
+        Returns:
+            z: Tensor of shape [B, num_classes, embedding_dim]
+        """
+        B, C, D, H, W = x.shape
+        x_slices = x.permute(0, 2, 1, 3, 4)
+        x_slices = x_slices.contiguous().view(B * D, C, H, W)
+        slice_embeddings = self.encoder(x_slices)
+        slice_embeddings = slice_embeddings.view(B, D, -1)
+        _, z = self.head(slice_embeddings, return_features=True)
+        return z
     
     def training_step(self, batch, batch_idx):
         """

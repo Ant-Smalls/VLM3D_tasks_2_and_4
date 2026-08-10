@@ -156,3 +156,56 @@ python3 src/scripts/test.py \
     --num_workers 2
 
 echo "Testing job completed"
+
+
+
+-----------------------------------------------------------
+Embedding visualization slurm Script (inference, 1 GPU):
+-----------------------------------------------------------
+
+#!/bin/bash -l
+#SBATCH --job-name=vlm3d_emb_viz
+#SBATCH -N 1
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+#SBATCH --ntasks-per-node=4
+#SBATCH -t 1:00:00
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=user@email.com
+#SBATCH --output=logs/emb_viz_%j.log
+#SBATCH --error=logs/emb_viz_%j.err
+
+cd /home/people/{student_number}/path_to_vlm3d_challenge/
+
+echo "Current working dir: $(pwd)"
+source venv/bin/activate
+
+DATA_DIR="/scratch/{student_number}/path_to_vlm3d_challenge_data/"
+CKPT="src/outputs/checkpoints/best_checkpoint"
+OUT_DIR="src/outputs/embedding_viz/"
+mkdir -p "$OUT_DIR" logs
+
+# All classes for one checkpoint (paper Block-2 diagnostic)
+python3 src/scripts/visualize_embeddings.py \
+    --checkpoints frozen600=$CKPT \
+    --data_dir $DATA_DIR \
+    --classes all \
+    --view all_classes \
+    --output_dir $OUT_DIR \
+    --cache_embeddings \
+    --batch_size 4 \
+    --num_workers 2 \
+    --device cuda
+
+# After a second checkpoint exists, compare one class across runs:
+# python3 src/scripts/visualize_embeddings.py \
+#     --checkpoints frozen600=$CKPT lora600=src/outputs/checkpoints/lora_best.ckpt \
+#     --data_dir $DATA_DIR \
+#     --classes "Lung nodule" \
+#     --view cross_checkpoint \
+#     --output_dir src/outputs/embedding_viz/nodule_compare \
+#     --cache_embeddings \
+#     --batch_size 4 \
+#     --device cuda
+
+echo "Embedding visualization job completed"

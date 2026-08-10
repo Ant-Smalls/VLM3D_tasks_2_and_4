@@ -22,12 +22,19 @@ class GatedAttentionMILHead(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.classifier = nn.Linear(embedding_dim, num_classes)
 
-    def forward(self, x):
+    def forward(self, x, return_features=False):
+        """
+        Args:
+            x: Slice embeddings [B, S, D]
+            return_features: If True, also return class-specific pooled embeddings z [B, C, D]
+        """
         v = torch.tanh(self.V(x))
         u = torch.sigmoid(self.U(x))
-        a = self.w(v * u)                           
+        a = self.w(v * u)
         a = torch.softmax(a, dim=1)
-        z = torch.einsum('bsc,bsd->bcd', a, x)      
+        z = torch.einsum('bsc,bsd->bcd', a, x)
         z = self.dropout(z)
         logits = (self.classifier.weight * z).sum(-1) + self.classifier.bias
-        return logits                               
+        if return_features:
+            return logits, z
+        return logits

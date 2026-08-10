@@ -7,3 +7,6 @@ exclude_300_TrainingFile.csv
 .scratch
 DS_store
 src/.DS_Store
+src/scripts/__pycache__/
+src/modules/__pycache__/
+src/notebooks/.DS_Store
