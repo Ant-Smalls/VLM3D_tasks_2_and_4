@@ -1,0 +1,44 @@
+              test_accuracy                           0.6833333373069763
+    test_ap/Arterial wall calcification                0.7767001390457153
+            test_ap/Atelectasis                         0.598447322845459
+          test_ap/Bronchiectasis                       0.1554480344057083
+           test_ap/Cardiomegaly                         0.858119785785675
+           test_ap/Consolidation                       0.21221396327018738
+test_ap/Coronary artery wall calcification             0.8843762278556824
+             test_ap/Emphysema                         0.5280868411064148
+           test_ap/Hiatal hernia                       0.3216136693954468
+  test_ap/Interlobular septal thickening               0.3076923191547394
+            test_ap/Lung nodule                        0.4073643982410431
+           test_ap/Lung opacity                        0.5230695009231567
+          test_ap/Lymphadenopathy                      0.4474872648715973
+         test_ap/Medical material                      0.2933993637561798
+    test_ap/Mosaic attenuation pattern                 0.41847825050354004
+     test_ap/Peribronchial thickening                  0.33782464265823364
+       test_ap/Pericardial effusion                    0.10000000149011612
+         test_ap/Pleural effusion                      0.5055014491081238
+    test_ap/Pulmonary fibrotic sequela                 0.3683476150035858
+   test_auc/Arterial wall calcification                0.9090909361839294
+           test_auc/Atelectasis                        0.7514204382896423
+          test_auc/Bronchiectasis                      0.7236363887786865
+           test_auc/Cardiomegaly                       0.9517624974250793
+          test_auc/Consolidation                       0.6081730723381042
+test_auc/Coronary artery wall calcification            0.9534161686897278
+            test_auc/Emphysema                         0.6772486567497253
+          test_auc/Hiatal hernia                       0.5540000200271606
+  test_auc/Interlobular septal thickening              0.8839285969734192
+           test_auc/Lung nodule                        0.4182857275009155
+           test_auc/Lung opacity                       0.6312576532363892
+         test_auc/Lymphadenopathy                      0.5718518495559692
+         test_auc/Medical material                     0.5163636207580566
+    test_auc/Mosaic attenuation pattern                0.8794642686843872
+     test_auc/Peribronchial thickening                 0.6800000071525574
+       test_auc/Pericardial effusion                   0.8474576473236084
+         test_auc/Pleural effusion                     0.9245283007621765
+    test_auc/Pulmonary fibrotic sequela                0.6909937858581543
+                  test_f1                              0.45016077160835266
+             test_hamming_loss                         0.3166666626930237
+                 test_loss                              0.841058611869812
+               test_mean_ap                            0.44689837098121643
+               test_mean_auc                            0.731826663017273
+              test_precision                           0.3349282443523407
+                test_recall                             0.686274528503418

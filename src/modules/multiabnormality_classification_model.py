@@ -9,7 +9,7 @@ import numpy as np
 import pytorch_lightning as pl
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score, accuracy_score, hamming_loss, average_precision_score
 
-from modules.encoder import create_encoder
+from modules.encoder import create_encoder, DEFAULT_LORA_TARGETS
 from modules.classification_head import GatedAttentionMILHead
 
 logger = logging.getLogger(__name__)
@@ -41,16 +41,23 @@ class MultiAbnormalityClassifier(pl.LightningModule):
     Multi-abnormality classifier for CT-RATE challenge.
     
     Architecture:
-    Step 1. Frozen DinoV3 encoder extracts features from each 2D slice
+    Step 1. DinoV2/V3 encoder extracts features from each 2D slice (frozen, or LoRA on DINOv2)
     Step 2. Gated attention MIL head computes per-class attention weights over slices
     Step 3. Each class pools slice features with its own attention distribution, then classifies with a per-class linear layer
     
     Args:
-        encoder_type: Type of encoder ('dinov3')
+        encoder_type: Type of encoder ('dinov2' or 'dinov3')
         local_model_dir: Path to local model directory
         num_classes: Number of abnormality classes (default: 18)
         dropout: Dropout probability in classification head (default: 0.3)
-        learning_rate: Learning rate for optimizer (default: 1e-3)
+        learning_rate: Learning rate for the classification head (default: 1e-3)
+        use_lora: If True, attach LoRA adapters on DINOv2 (default: False)
+        lora_r: LoRA rank (default: 8)
+        lora_alpha: LoRA alpha (default: 16)
+        lora_dropout: LoRA dropout (default: 0.05)
+        lora_targets: Module names for peft target_modules (default: query/key/value)
+        encoder_lr: Learning rate for LoRA adapter params (default: 1e-4)
+        attn_topk: If >0, keep top-k slice attention weights per class then renormalize
     """
     
     def __init__(
@@ -60,9 +67,18 @@ class MultiAbnormalityClassifier(pl.LightningModule):
         num_classes=18,
         position_weights=None,
         dropout=0.3,
-        learning_rate=1e-3
+        learning_rate=1e-3,
+        use_lora=False,
+        lora_r=8,
+        lora_alpha=16,
+        lora_dropout=0.05,
+        lora_targets=None,
+        encoder_lr=1e-4,
+        attn_topk=0,
     ):
         super().__init__()
+        if lora_targets is None:
+            lora_targets = list(DEFAULT_LORA_TARGETS)
         self.save_hyperparameters()
 
         if local_model_dir is None:
@@ -75,13 +91,22 @@ class MultiAbnormalityClassifier(pl.LightningModule):
         self.register_buffer('thresholds', torch.full((num_classes,), 0.5))
 
         
-        # load frozen encoder and trainable classification head
-        self.encoder = create_encoder(encoder_type, local_model_dir=local_model_dir)
+        # load encoder (frozen by default; optional LoRA on dinov2) and trainable head
+        self.encoder = create_encoder(
+            encoder_type,
+            local_model_dir=local_model_dir,
+            use_lora=use_lora,
+            lora_r=lora_r,
+            lora_alpha=lora_alpha,
+            lora_dropout=lora_dropout,
+            lora_targets=lora_targets,
+        )
         self.head = GatedAttentionMILHead(
             embedding_dim=self.encoder.embedding_dim,
             num_classes=num_classes,
             attn_dim=128,
             dropout=dropout,
+            attn_topk=attn_topk,
         )
         
         # loss function for multi-label classification
@@ -132,6 +157,25 @@ class MultiAbnormalityClassifier(pl.LightningModule):
         slice_embeddings = slice_embeddings.view(B, D, -1)
         _, z = self.head(slice_embeddings, return_features=True)
         return z
+
+    @torch.no_grad()
+    def extract_attention(self, x):
+        """
+        Extract per-slice gated-attention weights for every class.
+
+        Args:
+            x: Input tensor of shape [B, 3, D, H, W]
+
+        Returns:
+            a: Tensor of shape [B, D, num_classes] (softmax over depth/slices)
+        """
+        B, C, D, H, W = x.shape
+        x_slices = x.permute(0, 2, 1, 3, 4)
+        x_slices = x_slices.contiguous().view(B * D, C, H, W)
+        slice_embeddings = self.encoder(x_slices)
+        slice_embeddings = slice_embeddings.view(B, D, -1)
+        _, a = self.head(slice_embeddings, return_attention=True)
+        return a
     
     def training_step(self, batch, batch_idx):
         """
@@ -399,14 +443,29 @@ class MultiAbnormalityClassifier(pl.LightningModule):
         """
         Configure optimizer and learning rate scheduler
         
+        Frozen path: AdamW on the classification head only.
+        LoRA path: head at learning_rate, adapter params at encoder_lr.
+        
         Returns:
             Optimizer and learning rate scheduler configuration
         """
-        optimizer = torch.optim.AdamW(
-            self.head.parameters(),
-            lr=self.hparams.learning_rate,
-            weight_decay=1e-2,
-        )
+        if self.hparams.use_lora:
+            lora_params = [p for p in self.encoder.parameters() if p.requires_grad]
+            if not lora_params:
+                raise RuntimeError("use_lora=True but no trainable encoder parameters were found")
+            optimizer = torch.optim.AdamW(
+                [
+                    {"params": self.head.parameters(), "lr": self.hparams.learning_rate},
+                    {"params": lora_params, "lr": self.hparams.encoder_lr},
+                ],
+                weight_decay=1e-2,
+            )
+        else:
+            optimizer = torch.optim.AdamW(
+                self.head.parameters(),
+                lr=self.hparams.learning_rate,
+                weight_decay=1e-2,
+            )
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs)
 

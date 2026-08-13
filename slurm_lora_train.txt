@@ -1,0 +1,62 @@
+-----------------------------------------------------------
+LoRA train slurm Script - same random-600 splits as frozen-600:
+-----------------------------------------------------------
+
+#!/bin/bash -l
+#SBATCH --job-name=vlm3d_lora600
+# Specify number of nodes
+#SBATCH -N 1
+# Specify the GPU partition
+#SBATCH --partition=gpu
+# Request 1 GPU
+#SBATCH --gres=gpu:1
+# Specify number of tasks/cores per node
+#SBATCH --ntasks-per-node=4
+# Specify the run time
+#SBATCH -t 3:00:00
+# Set to email at start, end and failed jobs
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=user@email.com
+# Output logs
+#SBATCH --output=logs/lora_train_%j.log
+
+cd /home/people/{account_number}/path_to_local_VLM3D_challenge
+
+echo "Current working dir: $(pwd)"
+
+# Activate the virtual environment
+source venv/bin/activate
+
+# Set paths (reuse sampled_train_fixed + existing 480/60/60 subset_manifest)
+DATA_DIR="/scratch/{account_number}/path_to_root_directory_of_data/data/sampled_train_fixed"
+LABELS_CSV="src/scripts/download_data/training_data_labels/train_labels.csv"
+ENCODER_DIR="src/pretrained_encoders/dinov2-small"
+OUTPUT_DIR="src/outputs_lora600"
+
+# Create output directory if it doesn't exist
+mkdir -p $OUTPUT_DIR logs
+
+# Run LoRA training (clone frozen-600 recipe; adapters on DINOv2 Q/K/V)
+python3 src/scripts/train.py \
+    --data_dir $DATA_DIR \
+    --labels_csv $LABELS_CSV \
+    --encoder_dir $ENCODER_DIR \
+    --output_dir $OUTPUT_DIR \
+    --max_epochs 20 \
+    --batch_size 4 \
+    --num_workers 2 \
+    --dropout 0.3 \
+    --encoder_type dinov2 \
+    --seed 42 \
+    --use_lora \
+    --lora_r 8 \
+    --lora_alpha 16 \
+    --lora_dropout 0.05 \
+    --lora_targets query,key,value \
+    --encoder_lr 1e-4 \
+    --learning_rate 3e-4
+
+echo "LoRA training job completed"
+
+# After the job finishes, copy the Slurm log locally as:
+#   sonic_logs/600_lora_patients.log

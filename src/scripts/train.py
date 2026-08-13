@@ -51,6 +51,22 @@ def parse_args():
     parser.add_argument('--encoder_type', type=str, default='dinov2',
                     choices=['dinov2', 'dinov3'],
                     help='Type of encoder to use')
+    # LoRA settings (dinov2 only; default path stays fully frozen)
+    parser.add_argument('--use_lora', action='store_true',
+                        help='Attach LoRA adapters on DINOv2 attention (Q/K/V)')
+    parser.add_argument('--lora_r', type=int, default=8,
+                        help='LoRA rank (only used with --use_lora)')
+    parser.add_argument('--lora_alpha', type=int, default=16,
+                        help='LoRA alpha (only used with --use_lora)')
+    parser.add_argument('--lora_dropout', type=float, default=0.05,
+                        help='LoRA dropout (only used with --use_lora)')
+    parser.add_argument('--lora_targets', type=str, default='query,key,value',
+                        help='Comma-separated peft target module names')
+    parser.add_argument('--encoder_lr', type=float, default=1e-4,
+                        help='Learning rate for LoRA adapter params (only used with --use_lora)')
+    # Attention pooling (default 0 = full softmax; matches frozen-600 baseline)
+    parser.add_argument('--attn_topk', type=int, default=0,
+                        help='If >0, keep top-k slice attention weights per class then renormalize')
     # K-fold settings 
     parser.add_argument('--use_kfold', action='store_true', help='Use multilabel stratified k-fold cross validation')
     parser.add_argument('--k_folds', type=int, default=5, help='Number of folds for cross validation')
@@ -260,6 +276,16 @@ def main():
     # parse the command line arguments and set the random seed
     args = parse_args()
     torch.manual_seed(args.seed)
+
+    if args.use_lora and args.encoder_type != 'dinov2':
+        raise ValueError(
+            f"--use_lora requires --encoder_type dinov2 (got {args.encoder_type!r})"
+        )
+    lora_targets = [t.strip() for t in args.lora_targets.split(',') if t.strip()]
+    if args.use_lora and not lora_targets:
+        raise ValueError("--lora_targets must list at least one module name when --use_lora is set")
+    if args.attn_topk < 0:
+        raise ValueError(f"--attn_topk must be >= 0 (got {args.attn_topk})")
     
     # prepare the data and create the dataloaders
     logger.info("Preparing data...")
@@ -272,13 +298,28 @@ def main():
     position_weights = calculate_position_weights(train_data, num_classes=18)
     logger.info(f"Position weights: {position_weights}")
     logger.info(f"Min weight: {position_weights.min():.2f}, Max weight: {position_weights.max():.2f}, Mean: {position_weights.mean():.2f}")
+    if args.use_lora:
+        logger.info(
+            f"LoRA enabled: r={args.lora_r}, alpha={args.lora_alpha}, "
+            f"dropout={args.lora_dropout}, targets={lora_targets}, "
+            f"encoder_lr={args.encoder_lr}, head_lr={args.learning_rate}"
+        )
+    if args.attn_topk > 0:
+        logger.info(f"Attention top-k pooling enabled: k={args.attn_topk}")
     model = MultiAbnormalityClassifier(
         encoder_type=args.encoder_type,
         local_model_dir=args.encoder_dir,
         num_classes=18,
         position_weights=position_weights,
         dropout=args.dropout,
-        learning_rate=args.learning_rate
+        learning_rate=args.learning_rate,
+        use_lora=args.use_lora,
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        lora_targets=lora_targets,
+        encoder_lr=args.encoder_lr,
+        attn_topk=args.attn_topk,
     )
     
     # setup the checkpoint callback to save the best model based on the validation accuracy

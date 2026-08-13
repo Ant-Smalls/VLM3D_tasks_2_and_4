@@ -2,6 +2,8 @@
 docs
 AGENTS.md
 exclude-list.txt
+figures/attention_analysis_unmodified_frozen_lora_600/
+current_folder_numbers.txt
 skills-lock.json
 exclude_300_TrainingFile.csv
 .scratch

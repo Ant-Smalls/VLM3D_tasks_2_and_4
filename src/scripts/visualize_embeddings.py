@@ -14,6 +14,9 @@
 #     --output_dir src/outputs/embedding_viz/frozen600 \
 #     --batch_size 4
 #
+# all_classes / both also write inter_class_<name>.png (positives-only multi-class
+# PCA + centroid distance heatmap) and inter_class_centroid_distances_<name>.csv.
+#
 # Cross-checkpoint / single class (after LoRA lands):
 #
 #   python3 src/scripts/visualize_embeddings.py \
@@ -85,9 +88,12 @@ def parse_args():
     )
     parser.add_argument(
         '--view',
-        choices=['all_classes', 'cross_checkpoint', 'both'],
+        choices=['all_classes', 'cross_checkpoint', 'inter_class', 'both'],
         default='both',
-        help='Which figure(s) to write',
+        help=(
+            'Which figure(s) to write. all_classes and both also write '
+            'inter_class (positives-only multi-class PCA) per checkpoint.'
+        ),
     )
     parser.add_argument(
         '--output_dir',
@@ -264,6 +270,140 @@ def fit_pca_2d(z_class: np.ndarray) -> Tuple[np.ndarray, PCA]:
     pca = PCA(n_components=2)
     coords = pca.fit_transform(z_class)
     return coords, pca
+
+
+def collect_positive_embeddings(
+    z: np.ndarray,
+    labels: np.ndarray,
+    class_indices: List[Tuple[int, str]],
+) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    """
+    Stack class-specific bag embeddings for positive labels only.
+
+    A multilabel patient contributes one point per positive class (using that
+    class's attention-pooled z). Returns (points [M, D], class_ids [M], names).
+    """
+    points = []
+    class_ids = []
+    names = [name for _, name in class_indices]
+    local_id = {c_idx: i for i, (c_idx, _) in enumerate(class_indices)}
+
+    for c_idx, _ in class_indices:
+        pos = labels[:, c_idx].astype(bool)
+        if not np.any(pos):
+            continue
+        points.append(z[pos, c_idx, :])
+        class_ids.append(np.full(int(pos.sum()), local_id[c_idx], dtype=np.int64))
+
+    if not points:
+        return (
+            np.zeros((0, z.shape[-1]), dtype=np.float32),
+            np.zeros((0,), dtype=np.int64),
+            names,
+        )
+    return np.concatenate(points, axis=0), np.concatenate(class_ids, axis=0), names
+
+
+def pairwise_centroid_cosine_distance(
+    points: np.ndarray,
+    class_ids: np.ndarray,
+    n_classes: int,
+) -> np.ndarray:
+    """Return [C, C] matrix of 1 - cos(μ_i, μ_j); NaN if a class has no positives."""
+    dist = np.full((n_classes, n_classes), np.nan, dtype=np.float64)
+    centroids = []
+    for i in range(n_classes):
+        mask = class_ids == i
+        if not np.any(mask):
+            centroids.append(None)
+            continue
+        c = l2_normalize(points[mask], axis=1).mean(axis=0)
+        c = c / max(np.linalg.norm(c), 1e-8)
+        centroids.append(c)
+
+    for i in range(n_classes):
+        if centroids[i] is None:
+            continue
+        for j in range(n_classes):
+            if centroids[j] is None:
+                continue
+            dist[i, j] = 1.0 - float(np.dot(centroids[i], centroids[j]))
+    return dist
+
+
+def plot_inter_class(
+    z: np.ndarray,
+    labels: np.ndarray,
+    class_indices: List[Tuple[int, str]],
+    checkpoint_name: str,
+    output_path: str,
+    distance_csv_path: str,
+) -> None:
+    """
+    Positives-only PCA across classes + centroid cosine-distance heatmap.
+    Written automatically with all_classes / both (and standalone inter_class).
+    """
+    points, class_ids, names = collect_positive_embeddings(z, labels, class_indices)
+    n_classes = len(names)
+
+    if points.shape[0] < 2:
+        logger.warning(
+            f'inter_class skipped for {checkpoint_name}: '
+            f'need >=2 positive points, got {points.shape[0]}'
+        )
+        return
+
+    coords, pca = fit_pca_2d(points)
+    dist = pairwise_centroid_cosine_distance(points, class_ids, n_classes)
+
+    dist_df = pd.DataFrame(dist, index=names, columns=names)
+    dist_df.to_csv(distance_csv_path)
+    logger.info(f'Wrote {distance_csv_path}')
+
+    cmap = plt.get_cmap('tab20', max(n_classes, 1))
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6.5))
+
+    ax = axes[0]
+    for i, name in enumerate(names):
+        mask = class_ids == i
+        if not np.any(mask):
+            continue
+        ax.scatter(
+            coords[mask, 0], coords[mask, 1],
+            c=[cmap(i)], s=22, alpha=0.75, label=f'{name} (n={int(mask.sum())})',
+            edgecolors='none',
+        )
+        ax.scatter(
+            coords[mask, 0].mean(), coords[mask, 1].mean(),
+            c=[cmap(i)], s=120, marker='X', edgecolors='black', linewidths=0.6,
+        )
+    pc1 = pca.explained_variance_ratio_[0]
+    pc2 = pca.explained_variance_ratio_[1]
+    ax.set_title(
+        f'Positive cases by class — {checkpoint_name}\n'
+        f'PC1+PC2={pc1 + pc2:.1%}'
+    )
+    ax.set_xlabel('PC1')
+    ax.set_ylabel('PC2')
+    ax.legend(fontsize=6, loc='best', frameon=False, markerscale=1.2)
+
+    ax_h = axes[1]
+    im = ax_h.imshow(dist, cmap='viridis', vmin=0.0, vmax=1.0, aspect='auto')
+    ax_h.set_xticks(range(n_classes))
+    ax_h.set_yticks(range(n_classes))
+    ax_h.set_xticklabels(names, rotation=90, fontsize=7)
+    ax_h.set_yticklabels(names, fontsize=7)
+    ax_h.set_title('Centroid cosine distance (1 − cos)')
+    fig.colorbar(im, ax=ax_h, fraction=0.046, pad=0.04)
+
+    fig.suptitle(
+        f'Inter-class positive separation — {checkpoint_name}',
+        fontsize=12,
+    )
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    logger.info(f'Wrote {output_path}')
 
 
 def plot_all_classes(
@@ -514,6 +654,22 @@ def main():
                 class_indices,
                 name,
                 out,
+            )
+
+    # inter_class: auto with all_classes / both (single-ckpt or multi); also standalone
+    if args.view in ('all_classes', 'inter_class', 'both'):
+        for name in checkpoint_names:
+            out = os.path.join(args.output_dir, f'inter_class_{name}.png')
+            dist_csv = os.path.join(
+                args.output_dir, f'inter_class_centroid_distances_{name}.csv'
+            )
+            plot_inter_class(
+                embeddings[name]['z'],
+                embeddings[name]['labels'],
+                class_indices,
+                name,
+                out,
+                dist_csv,
             )
 
     if args.view in ('cross_checkpoint', 'both'):
