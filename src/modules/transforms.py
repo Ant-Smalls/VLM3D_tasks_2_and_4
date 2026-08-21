@@ -27,118 +27,222 @@ from monai.transforms import (
     EnsureTyped
 )
 
+from modules.window_sets import (
+    CALCIUM_WINDOW_HU,
+    DEFAULT_GENERAL_PERCENTILES,
+    FLUID_WINDOW_HU,
+    KNOWN_WINDOW_SETS,
+    LUNG_WINDOW_HU,
+    WINDOW_SET_DEFAULT,
+    WINDOW_SET_LUNG_MEDIASTINUM_BONE,
+    resolve_window_set,
+    window_set_from_checkpoint,
+    window_set_from_hparams,
+)
+
+# Re-export so train/test/analysis use a single transforms import instead of circular dependecies
+__all__ = [
+    "AugmentData",
+    "KNOWN_WINDOW_SETS",
+    "TransformData",
+    "WINDOW_SET_DEFAULT",
+    "WINDOW_SET_LUNG_MEDIASTINUM_BONE",
+    "apply_window_set",
+    "get_train_transforms",
+    "get_valid_transforms",
+    "resolve_window_set",
+    "window_set_from_checkpoint",
+    "window_set_from_hparams",
+]
+
+
+def _channel2_intensity_transform(window_set, general_percentiles, lung_window):
+    """
+    Selects and returns the appropriate MONAI intensity transform for channel 2
+    ("image_general") based on the window set.
+    
+    Args:
+        window_set (str): The name of the window set ("default" or "lung_mediastinum_bone").
+        general_percentiles (tuple): (lower, upper) percentiles for intensity normalization, used for the default window set.
+        lung_window (tuple): (a_min, a_max) HU range for lung windowing, used when window_set is "lung_mediastinum_bone".
+    
+    Returns:
+        Transform: An intensity normalization transform for channel 2.
+    """
+    if window_set == WINDOW_SET_LUNG_MEDIASTINUM_BONE:
+        # Use a fixed HU window for the lung window set
+        return ScaleIntensityRanged(
+            keys=["image_general"],
+            a_min=lung_window[0],
+            a_max=lung_window[1],
+            b_min=0.0,
+            b_max=1.0,
+            clip=True,
+        )
+    # Use percentile-based scaling for the default/general window set
+    return ScaleIntensityRangePercentilesd(
+        keys=["image_general"],
+        lower=general_percentiles[0],
+        upper=general_percentiles[1],
+        b_min=0.0,
+        b_max=1.0,
+        clip=True,
+    )
+
+
+def _window_intensity_pipeline(
+    window_set=WINDOW_SET_DEFAULT,
+    fluid_window=FLUID_WINDOW_HU,
+    calcium_window=CALCIUM_WINDOW_HU,
+    general_percentiles=DEFAULT_GENERAL_PERCENTILES,
+    lung_window=LUNG_WINDOW_HU,
+):
+    """
+    Builds a MONAI Compose pipeline that maps a 1-channel HU volume to 3 windowed channels.
+    
+    Args:
+        window_set (str): The name of the window set ("default" or "lung_mediastinum_bone").
+        fluid_window (tuple): (a_min, a_max) HU range for channel 0 (fluid/soft tissue).
+        calcium_window (tuple): (a_min, a_max) HU range for channel 1 (calcium/bone).
+        general_percentiles (tuple): (lower, upper) percentiles for intensity normalization, used for the default window set.
+        lung_window (tuple): (a_min, a_max) HU range for lung windowing, used when window_set is "lung_mediastinum_bone".
+    
+    Returns:
+        Compose: A MONAI pipeline that writes a 3-channel image under the "image" key.
+    """
+    window_set = resolve_window_set(window_set)
+    return Compose([
+        CopyItemsd(
+            keys=["image"],
+            times=3,
+            names=["image_fluid", "image_calcium", "image_general"],
+        ),
+        ScaleIntensityRanged(
+            keys=["image_fluid"],
+            a_min=fluid_window[0],
+            a_max=fluid_window[1],
+            b_min=0.0,
+            b_max=1.0,
+            clip=True,
+        ),
+        ScaleIntensityRanged(
+            keys=["image_calcium"],
+            a_min=calcium_window[0],
+            a_max=calcium_window[1],
+            b_min=0.0,
+            b_max=1.0,
+            clip=True,
+        ),
+        _channel2_intensity_transform(window_set, general_percentiles, lung_window),
+        ConcatItemsd(
+            keys=["image_fluid", "image_calcium", "image_general"],
+            name="image",
+            dim=0,
+        ),
+        DeleteItemsd(keys=["image_fluid", "image_calcium", "image_general"]),
+    ])
+
+
+def apply_window_set(image, window_set=WINDOW_SET_DEFAULT):
+    """
+    Applies a named 3-channel HU layout to an already-loaded volume.
+    
+    Args:
+        image (Tensor): Volume of shape [1, D, H, W] in HU.
+        window_set (str): The name of the window set ("default" or "lung_mediastinum_bone").
+    
+    Returns:
+        Tensor: Volume of shape [3, D, H, W] scaled to 0-1.
+    """
+    pipeline = _window_intensity_pipeline(window_set=window_set)
+    out = pipeline({"image": image})
+    return out["image"]
+
+
 class TransformData:
     """
-    Transform pipeline
+    Builds the load-and-window preprocessing pipeline for a 3-channel CT volume.
     
-    Creates a 3-channel 3D multi-window approach:
-    - Channel 0: Fluid/Soft Tissue window (pleural/pericardial effusion)
-    - Channel 1: Calcification/Bone window (coronary arterial wall calcifications)
-    - Channel 2: Generalist window (broad tissue contrast)
+    Channel 0 is the fluid/soft tissue window. Channel 1 is the calcium/bone window.
+    Channel 2 is the percentile generalist for "default", or the lung window
+    [-1000, 400] HU for "lung_mediastinum_bone".
     
-    Args: 
-        spatial_size: Target spatial dimensions (D, H, W)
-        pixdim: Target voxel spacing in mm 
-        fluid_window: HU range (min, max) for soft tissue window
-        calcium_window: HU range (min, max) for calcification window
-        general_percentiles: Percentile range (lower, upper) for adaptive scaling
+    Args:
+        spatial_size (tuple): Target spatial dimensions (D, H, W).
+        pixdim (tuple): Target voxel spacing in mm.
+        window_set (str): The name of the window set ("default" or "lung_mediastinum_bone").
+        fluid_window (tuple): (min, max) HU range for the soft tissue window.
+        calcium_window (tuple): (min, max) HU range for the calcification window.
+        general_percentiles (tuple): (lower, upper) percentiles for default channel 2.
+        lung_window (tuple): (min, max) HU range for lung-mediastinum-bone channel 2.
     """
-    
+
     def __init__(
         self,
         spatial_size=(96, 224, 224),
         pixdim=(1.5, 1.5, 1.5),
-        fluid_window=(-40, 400),
-        calcium_window=(300, 1500),
-        general_percentiles=(0.5, 99.5)
+        window_set=WINDOW_SET_DEFAULT,
+        fluid_window=FLUID_WINDOW_HU,
+        calcium_window=CALCIUM_WINDOW_HU,
+        general_percentiles=DEFAULT_GENERAL_PERCENTILES,
+        lung_window=LUNG_WINDOW_HU,
     ):
         self.spatial_size = spatial_size
         self.pixdim = pixdim
+        self.window_set = resolve_window_set(window_set)
         self.fluid_window = fluid_window
         self.calcium_window = calcium_window
         self.general_percentiles = general_percentiles
+        self.lung_window = lung_window
         self.transform_pipeline = self._build_pipeline()
     
     def _build_pipeline(self):
         """
-        Build MONAI preprocessing pipeline
+        Builds the MONAI preprocessing pipeline from load through windowing and resize.
         
         Returns:
-            MONAI Compose pipeline
+            Compose: A MONAI preprocessing pipeline.
         """
         return Compose([
-            # load and prepare raw data and standardize orientiation and spacing anatomically
             LoadImaged(keys=["image"]),
             EnsureChannelFirstd(keys=["image"]),
             Orientationd(keys=["image"], axcodes="RAS"),
             Spacingd(keys=["image"], pixdim=self.pixdim, mode="bilinear"),
 
-            # duplicate image for each window    
-            CopyItemsd(
-            keys=["image"], 
-            times=3, 
-            names=["image_fluid", "image_calcium", "image_general"]
+            _window_intensity_pipeline(
+                window_set=self.window_set,
+                fluid_window=self.fluid_window,
+                calcium_window=self.calcium_window,
+                general_percentiles=self.general_percentiles,
+                lung_window=self.lung_window,
             ),
-            # fluid/soft tissue window for pleural and pericardial effusion
-            ScaleIntensityRanged(
-            keys=["image_fluid"], 
-            a_min=self.fluid_window[0], 
-            a_max=self.fluid_window[1], 
-            b_min=0.0, 
-            b_max=1.0, 
-            clip=True
-            ),
-            # calcification window for coronary arterial wall calcification
-            ScaleIntensityRanged(
-            keys=["image_calcium"], 
-            a_min=self.calcium_window[0], 
-            a_max=self.calcium_window[1], 
-            b_min=0.0, 
-            b_max=1.0, 
-            clip=True
-            ),
-            # generalist window based on percentile scaling
-            ScaleIntensityRangePercentilesd(
-            keys=["image_general"], 
-            lower=self.general_percentiles[0], 
-            upper=self.general_percentiles[1], 
-            b_min=0.0, 
-            b_max=1.0, 
-            clip=True
-            ),
-            # merge windows into 3 channel image, clean up temp windowed images, remove empty space
-            ConcatItemsd(keys=["image_fluid", "image_calcium", "image_general"], name="image", dim=0),
-            DeleteItemsd(keys=["image_fluid", "image_calcium", "image_general"]),
             CropForegroundd(keys=["image"], source_key="image"),
 
-            # standardize to target dimensions and convert types 
             ResizeWithPadOrCropd(keys=["image"], spatial_size=self.spatial_size),
             EnsureTyped(keys=["image", "label"], dtype=torch.float32)
         ])
     
     def __call__(self, data_dict):
         """
-        Apply full transform pipeline to input data
+        Applies the full transform pipeline to an input data dictionary.
         
         Args:
-            data_dict: Dictionary with 'image' key containing file path or tensor
-            
+            data_dict (dict): Dictionary with an "image" key containing a file path or tensor.
+        
         Returns:
-            data_dict: Transformed dictionary with 3-channel volume [3, D, 224, 224]
+            dict: Transformed dictionary with a 3-channel volume of shape [3, D, H, W].
         """
         return self.transform_pipeline(data_dict)
 
 
 class AugmentData:
     """
-    Augmentation pipeline for CT-RATE training and validation.
+    Builds the CT-RATE training augmentation pipeline.
     
-    Applies data augmentation in three stages:
-    - Spatial: flips, rotations, translations, scaling
-    - Noise/blur: Gaussian noise, smoothing, low-resolution simulation
-    - Intensity: brightness and contrast adjustments
-    
-    Parameters based on "Revisiting 2D Foundation Models for Scalable 3D Medical Image Classification"
+    Augmentations run in three stages: spatial (flips, rotations, translations, scaling),
+    noise/blur (Gaussian noise, smoothing, low-resolution simulation), and intensity
+    (brightness and contrast). Parameters follow "Revisiting 2D Foundation Models for
+    Scalable 3D Medical Image Classification".
     """
     
     def __init__(self):
@@ -162,13 +266,13 @@ class AugmentData:
     
     def get_train_augmentations(self):
         """
-        Get training augmentation pipeline
+        Returns the training augmentation pipeline.
         
         Returns:
-            MONAI Compose pipeline with training augmentations
+            Compose: A MONAI pipeline with spatial, noise, and intensity augmentations.
         """
         return Compose([
-            # spatial augmentations
+            # Spatial augmentations
             RandFlipd(
                 keys=["image"], 
                 prob=self.spatial_flip_prob, 
@@ -184,7 +288,7 @@ class AugmentData:
                 padding_mode="zeros"
             ),
             
-            # noise, blur & artifact augmentations
+            # Noise, blur, and artifact augmentations
             RandGaussianNoised(
                 keys=["image"], 
                 prob=self.noise_gaussian_prob, 
@@ -204,7 +308,7 @@ class AugmentData:
                 zoom_range=self.noise_lowres_zoom
             ),
             
-            # intensity augmentations
+            # Intensity augmentations
             RandScaleIntensityd(
                 keys=["image"], 
                 factors=self.intensity_scale_factors, 
@@ -217,18 +321,27 @@ class AugmentData:
             )
         ])
 
-def get_train_transforms(spatial_size=(96, 224, 224), pixdim=(1.5, 1.5, 1.5)):
+def get_train_transforms(
+    spatial_size=(96, 224, 224),
+    pixdim=(1.5, 1.5, 1.5),
+    window_set=WINDOW_SET_DEFAULT,
+):
     """
-    Create training pipeline with preprocessing and augmentation
+    Creates the training pipeline with preprocessing and augmentation.
     
     Args:
-        spatial_size: Target spatial dimensions (D, H, W)
-        pixdim: Target voxel spacing in mm 
+        spatial_size (tuple): Target spatial dimensions (D, H, W).
+        pixdim (tuple): Target voxel spacing in mm.
+        window_set (str): The name of the window set ("default" or "lung_mediastinum_bone").
     
     Returns:
-        MONAI Compose pipeline for training
+        Compose: A MONAI pipeline for training.
     """
-    preprocessing = TransformData(spatial_size=spatial_size, pixdim=pixdim)
+    preprocessing = TransformData(
+        spatial_size=spatial_size,
+        pixdim=pixdim,
+        window_set=window_set,
+    )
     augmentation = AugmentData()
     
     return Compose([
@@ -237,15 +350,24 @@ def get_train_transforms(spatial_size=(96, 224, 224), pixdim=(1.5, 1.5, 1.5)):
     ])
 
 
-def get_valid_transforms(spatial_size=(96, 224, 224), pixdim=(1.5, 1.5, 1.5)):
+def get_valid_transforms(
+    spatial_size=(96, 224, 224),
+    pixdim=(1.5, 1.5, 1.5),
+    window_set=WINDOW_SET_DEFAULT,
+):
     """
-    Create validation pipeline for preprocessing
+    Creates the validation pipeline with preprocessing only.
     
     Args:
-        spatial_size: Target spatial dimensions (D, H, W)
-        pixdim: Target voxel spacing in mm 
+        spatial_size (tuple): Target spatial dimensions (D, H, W).
+        pixdim (tuple): Target voxel spacing in mm.
+        window_set (str): The name of the window set ("default" or "lung_mediastinum_bone").
     
     Returns:
-        MONAI Compose pipeline 
+        TransformData: A callable preprocessing pipeline for validation and test.
     """
-    return TransformData(spatial_size=spatial_size, pixdim=pixdim)
+    return TransformData(
+        spatial_size=spatial_size,
+        pixdim=pixdim,
+        window_set=window_set,
+    )

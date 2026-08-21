@@ -1,0 +1,82 @@
+Current working dir: /home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge
+
+Sanity Checking: |          | 0/? [00:00<?, ?it/s]
+Sanity Checking: |          | 0/? [00:00<?, ?it/s]
+Sanity Checking DataLoader 0:   0%|          | 0/2 [00:00<?, ?it/s]
+Sanity Checking DataLoader 0:  50%|█████     | 1/2 [00:00<00:00,  1.47it/s]
+Sanity Checking DataLoader 0: 100%|██████████| 2/2 [00:01<00:00,  1.73it/s]
+                                                                           
+
+Training: |          | 0/? [00:00<?, ?it/s]
+Training: |          | 0/? [00:00<?, ?it/s]
+
+...
+
+Testing: |          | 0/? [00:00<?, ?it/s]
+Testing: |          | 0/? [00:00<?, ?it/s]
+Testing DataLoader 0:   0%|          | 0/15 [00:00<?, ?it/s]
+Testing DataLoader 0:   7%|▋         | 1/15 [00:00<00:06,  2.10it/s]
+Testing DataLoader 0:  13%|█▎        | 2/15 [00:00<00:06,  2.09it/s]
+Testing DataLoader 0:  20%|██        | 3/15 [00:27<01:48,  0.11it/s]
+Testing DataLoader 0:  27%|██▋       | 4/15 [00:27<01:15,  0.15it/s]
+Testing DataLoader 0:  33%|███▎      | 5/15 [00:49<01:39,  0.10it/s]
+Testing DataLoader 0:  40%|████      | 6/15 [00:50<01:16,  0.12it/s]
+Testing DataLoader 0:  47%|████▋     | 7/15 [01:12<01:23,  0.10it/s]
+Testing DataLoader 0:  53%|█████▎    | 8/15 [01:13<01:04,  0.11it/s]
+Testing DataLoader 0:  60%|██████    | 9/15 [01:36<01:04,  0.09it/s]
+Testing DataLoader 0:  67%|██████▋   | 10/15 [01:37<00:48,  0.10it/s]
+Testing DataLoader 0:  73%|███████▎  | 11/15 [02:00<00:43,  0.09it/s]
+Testing DataLoader 0:  80%|████████  | 12/15 [02:01<00:30,  0.10it/s]
+Testing DataLoader 0:  87%|████████▋ | 13/15 [02:31<00:23,  0.09it/s]
+Testing DataLoader 0:  93%|█████████▎| 14/15 [02:32<00:10,  0.09it/s]
+Testing DataLoader 0: 100%|██████████| 15/15 [02:51<00:00,  0.09it/s]
+Testing DataLoader 0: 100%|██████████| 15/15 [02:51<00:00,  0.09it/s]
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                Test metric                               DataLoader 0
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+               test_accuracy                           0.6518518328666687
+    test_ap/Arterial wall calcification                0.7664070725440979
+            test_ap/Atelectasis                        0.5791456699371338
+          test_ap/Bronchiectasis                       0.13250377774238586
+           test_ap/Cardiomegaly                        0.7756763696670532
+           test_ap/Consolidation                       0.18776154518127441
+test_ap/Coronary artery wall calcification             0.7917796969413757
+             test_ap/Emphysema                         0.4962223172187805
+           test_ap/Hiatal hernia                       0.2502773702144623
+  test_ap/Interlobular septal thickening               0.40263158082962036
+            test_ap/Lung nodule                        0.41651085019111633
+           test_ap/Lung opacity                        0.5181514620780945
+          test_ap/Lymphadenopathy                      0.43268734216690063
+         test_ap/Medical material                      0.2932804226875305
+    test_ap/Mosaic attenuation pattern                 0.2080627679824829
+     test_ap/Peribronchial thickening                  0.28093257546424866
+       test_ap/Pericardial effusion                    0.1428571492433548
+         test_ap/Pleural effusion                      0.7050951719284058
+    test_ap/Pulmonary fibrotic sequela                 0.4127271771430969
+   test_auc/Arterial wall calcification                0.8863636255264282
+           test_auc/Atelectasis                        0.7173295617103577
+          test_auc/Bronchiectasis                      0.6363636255264282
+           test_auc/Cardiomegaly                        0.918367326259613
+          test_auc/Consolidation                       0.5865384340286255
+test_auc/Coronary artery wall calcification            0.9021739363670349
+            test_auc/Emphysema                         0.7050264477729797
+          test_auc/Hiatal hernia                       0.5400000214576721
+  test_auc/Interlobular septal thickening              0.9017857313156128
+           test_auc/Lung nodule                         0.521142840385437
+           test_auc/Lung opacity                       0.5811966061592102
+         test_auc/Lymphadenopathy                      0.5570370554924011
+         test_auc/Medical material                      0.589090883731842
+    test_auc/Mosaic attenuation pattern                0.8080357313156128
+     test_auc/Peribronchial thickening                 0.6480000019073486
+       test_auc/Pericardial effusion                   0.8983050584793091
+         test_auc/Pleural effusion                     0.9191374778747559
+    test_auc/Pulmonary fibrotic sequela                0.7298136353492737
+                  test_f1                              0.4012738764286041
+             test_hamming_loss                         0.3481481373310089
+                 test_loss                             0.8477761149406433
+               test_mean_ap                            0.4329283535480499
+               test_mean_auc                           0.7247615456581116
+              test_precision                           0.2971698045730591
+                test_recall                            0.6176470518112183
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Training job completed

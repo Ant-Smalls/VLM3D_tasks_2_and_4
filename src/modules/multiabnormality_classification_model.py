@@ -38,26 +38,29 @@ CLASS_NAMES = [
 
 class MultiAbnormalityClassifier(pl.LightningModule):
     """
-    Multi-abnormality classifier for CT-RATE challenge.
+    Classifies 18 CT-RATE abnormalities with a 2D encoder and a gated-attention MIL head.
     
-    Architecture:
-    Step 1. DinoV2/V3 encoder extracts features from each 2D slice (frozen, or LoRA on DINOv2)
-    Step 2. Gated attention MIL head computes per-class attention weights over slices
-    Step 3. Each class pools slice features with its own attention distribution, then classifies with a per-class linear layer
+    The encoder embeds each axial slice. The head computes slice attention per class,
+    pools slice features with those weights, and classifies with a per-class linear layer.
     
     Args:
-        encoder_type: Type of encoder ('dinov2' or 'dinov3')
-        local_model_dir: Path to local model directory
-        num_classes: Number of abnormality classes (default: 18)
-        dropout: Dropout probability in classification head (default: 0.3)
-        learning_rate: Learning rate for the classification head (default: 1e-3)
-        use_lora: If True, attach LoRA adapters on DINOv2 (default: False)
-        lora_r: LoRA rank (default: 8)
-        lora_alpha: LoRA alpha (default: 16)
-        lora_dropout: LoRA dropout (default: 0.05)
-        lora_targets: Module names for peft target_modules (default: query/key/value)
-        encoder_lr: Learning rate for LoRA adapter params (default: 1e-4)
-        attn_topk: If >0, keep top-k slice attention weights per class then renormalize
+        encoder_type (str): Encoder name ("dinov2" or "dinov3").
+        local_model_dir (str): Path to the local encoder weights directory.
+        num_classes (int): Number of abnormality classes (default: 18).
+        position_weights (Tensor, optional): Positive-class weights for BCE. Ones if omitted.
+        dropout (float): Dropout probability in the classification head (default: 0.3).
+        learning_rate (float): Learning rate for the classification head (default: 1e-3).
+        use_lora (bool): If True, attach LoRA adapters on DINOv2 (default: False).
+        lora_r (int): LoRA rank (default: 8).
+        lora_alpha (int): LoRA alpha (default: 16).
+        lora_dropout (float): LoRA dropout (default: 0.05).
+        lora_targets (list, optional): Module names for peft target_modules. Query, key, and value if omitted.
+        encoder_lr (float): Learning rate for LoRA adapter parameters (default: 1e-4).
+        attn_topk (int): If >0, apply top-k pooling on slice attention. 0 is full softmax.
+        window_set (str): Window set stored for eval ("default" or "lung_mediastinum_bone"). Forward does not read it.
+    
+    Raises:
+        ValueError: If local_model_dir is not provided.
     """
     
     def __init__(
@@ -75,6 +78,7 @@ class MultiAbnormalityClassifier(pl.LightningModule):
         lora_targets=None,
         encoder_lr=1e-4,
         attn_topk=0,
+        window_set='default',
     ):
         super().__init__()
         if lora_targets is None:
@@ -91,7 +95,6 @@ class MultiAbnormalityClassifier(pl.LightningModule):
         self.register_buffer('thresholds', torch.full((num_classes,), 0.5))
 
         
-        # load encoder (frozen by default; optional LoRA on dinov2) and trainable head
         self.encoder = create_encoder(
             encoder_type,
             local_model_dir=local_model_dir,
@@ -109,31 +112,28 @@ class MultiAbnormalityClassifier(pl.LightningModule):
             attn_topk=attn_topk,
         )
         
-        # loss function for multi-label classification
         self.criterion = nn.BCEWithLogitsLoss(pos_weight=self.position_weights)
         self.validation_step_outputs = []
         self.test_step_outputs = []
         
     def forward(self, x):
         """
-        Forward pass through multi-abnormality classification head
+        Returns multi-label logits for a batched 3-channel volume.
         
         Args:
-            x: Input tensor of shape [B, 3, D, H, W]
-               where B=batch, 3=channels, D=depth, H=224, W=224
+            x (Tensor): Input of shape [B, 3, D, H, W].
         
         Returns:
-            logits: Output tensor of shape [B, num_classes]
+            Tensor: Logits of shape [B, num_classes].
         """
         B, C, D, H, W = x.shape
         
-        # flatten batch and depth dimensions and extract embeddings from all slices via encoder
+        # Encoder is 2D: fold batch and depth so each axial slice is one image
         x_slices = x.permute(0, 2, 1, 3, 4)
         x_slices = x_slices.contiguous().view(B * D, C, H, W)
     
         slice_embeddings = self.encoder(x_slices)
         
-        # reshape back to separate batch and depth and pass through classification head
         slice_embeddings = slice_embeddings.view(B, D, -1)
         logits = self.head(slice_embeddings)
         
@@ -142,15 +142,16 @@ class MultiAbnormalityClassifier(pl.LightningModule):
     @torch.no_grad()
     def extract_class_embeddings(self, x):
         """
-        Extract class-specific attention-pooled bag embeddings z.
-
+        Returns class-specific attention-pooled bag embeddings.
+        
         Args:
-            x: Input tensor of shape [B, 3, D, H, W]
-
+            x (Tensor): Input of shape [B, 3, D, H, W].
+        
         Returns:
-            z: Tensor of shape [B, num_classes, embedding_dim]
+            Tensor: Bag embeddings of shape [B, num_classes, embedding_dim].
         """
         B, C, D, H, W = x.shape
+        # Encoder is 2D: fold batch and depth so each axial slice is one image
         x_slices = x.permute(0, 2, 1, 3, 4)
         x_slices = x_slices.contiguous().view(B * D, C, H, W)
         slice_embeddings = self.encoder(x_slices)
@@ -161,15 +162,16 @@ class MultiAbnormalityClassifier(pl.LightningModule):
     @torch.no_grad()
     def extract_attention(self, x):
         """
-        Extract per-slice gated-attention weights for every class.
-
+        Returns slice attention weights for every class.
+        
         Args:
-            x: Input tensor of shape [B, 3, D, H, W]
-
+            x (Tensor): Input of shape [B, 3, D, H, W].
+        
         Returns:
-            a: Tensor of shape [B, D, num_classes] (softmax over depth/slices)
+            Tensor: Slice attention of shape [B, D, num_classes], softmax over depth.
         """
         B, C, D, H, W = x.shape
+        # Encoder is 2D: fold batch and depth so each axial slice is one image
         x_slices = x.permute(0, 2, 1, 3, 4)
         x_slices = x_slices.contiguous().view(B * D, C, H, W)
         slice_embeddings = self.encoder(x_slices)
@@ -179,47 +181,43 @@ class MultiAbnormalityClassifier(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         """
-        Training step for one batch - required by PyTorch Lightning
+        Computes BCE loss for one training batch.
         
         Args:
-            batch: Tuple of (images, labels)
-            batch_idx: Index of current batch
+            batch (dict): Batch with "image" and "label" keys.
+            batch_idx (int): Index of the current batch.
         
         Returns:
-            loss: Training loss for this batch
+            Tensor: Training loss for this batch.
         """
         images = batch["image"]
         labels = batch["label"]
         
-        # forward pass and loss computation
         logits = self(images)
         loss = self.criterion(logits, labels)
         
-        # log training metrics
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         
         return loss
     
     def validation_step(self, batch, batch_idx):
         """
-        Validation step for one batch - required by PyTorch Lightning for validation 
+        Collects logits, probabilities, and labels for one validation batch.
         
         Args:
-            batch: Tuple of (images, labels)
-            batch_idx: Index of current batch
+            batch (dict): Batch with "image" and "label" keys.
+            batch_idx (int): Index of the current batch.
         """
         images = batch["image"]
         labels = batch["label"]
         
-        # forward pass and loss computation
         logits = self(images)
         loss = self.criterion(logits, labels)
         
-        # convert logits to predictions
         probs = torch.sigmoid(logits)
+        # Thresholds come from F1 tuning on the previous validation epoch
         preds = (probs > self.thresholds).float()
         
-        # store outputs for validation metrics and log validation loss
         self.validation_step_outputs.append({
             'loss': loss,
             'preds': preds.detach().cpu(),
@@ -230,24 +228,22 @@ class MultiAbnormalityClassifier(pl.LightningModule):
     
     def test_step(self, batch, batch_idx):
         """
-        Test step for one batch - required by PyTorch Lightning for testing
+        Collects logits, probabilities, and labels for one test batch.
         
         Args:
-            batch: Tuple of (images, labels)
-            batch_idx: Index of current batch
+            batch (dict): Batch with "image" and "label" keys.
+            batch_idx (int): Index of the current batch.
         """
         images = batch["image"]
         labels = batch["label"]
         
-        # forward pass and loss computation
         logits = self(images)
         loss = self.criterion(logits, labels)
 
-        # convert logits to predictions
         probs = torch.sigmoid(logits)
+        # Thresholds come from F1 tuning on the last validation epoch
         preds = (probs > self.thresholds).float()
         
-        # store outputs for test metrics and log test loss
         self.test_step_outputs.append({
             'loss': loss,
             'preds': preds.detach().cpu(),
@@ -258,13 +254,11 @@ class MultiAbnormalityClassifier(pl.LightningModule):
     
     def on_validation_epoch_end(self):
         """
-        Compute epoch-level validation metrics - PyTorch Lightning
+        Aggregates validation batches and logs mean AUC, AP, and micro metrics.
         
-        Aggregates predictions across all validation batches and computes:
-        - Mean AUC across all classes
-        - Accuracy, F1, Precision, Recall
+        Tunes per-class F1-optimal thresholds when a class has both labels in the epoch.
+        Classes with a single label log NaN for AUC and AP.
         """
-        # concatenate all batch outputs and convert to numpy for sklearn metrics
         all_preds = torch.cat([x['preds'] for x in self.validation_step_outputs])
         all_probs = torch.cat([x['probs'] for x in self.validation_step_outputs])
         all_labels = torch.cat([x['labels'] for x in self.validation_step_outputs])
@@ -273,7 +267,7 @@ class MultiAbnormalityClassifier(pl.LightningModule):
         labels_np = all_labels.numpy()
         
         try:
-            # per-class F1-optimal threshold tuning
+            # Per-class F1-optimal threshold tuning
             grid = np.linspace(0.05, 0.95, 19)
             best_t = np.full(self.hparams.num_classes, 0.5)
             for i in range(self.hparams.num_classes):
@@ -288,8 +282,6 @@ class MultiAbnormalityClassifier(pl.LightningModule):
             self.thresholds = torch.tensor(best_t, dtype=torch.float32, device=self.device)
             preds_np = (probs_np > best_t).astype(np.float32)
 
-            # compute the per class AUC scores for the 18 abnormality classes and 
-            # the mean AUC score across all classes
             per_class_auc = {}
 
             for i in range(self.hparams.num_classes):
@@ -306,8 +298,6 @@ class MultiAbnormalityClassifier(pl.LightningModule):
                 if not np.isnan(v):
                     self.log(f'val_auc/{name}', v, on_epoch=True)
 
-            # compute the per class Average Precision scores for the 18 abnormality classes and 
-            # the mean Average Precision score across all classes
             per_class_ap = {}
 
             for i in range(self.hparams.num_classes):
@@ -324,14 +314,12 @@ class MultiAbnormalityClassifier(pl.LightningModule):
                 if not np.isnan(v):
                     self.log(f'val_ap/{name}', v, on_epoch=True)
             
-            # accuracy, F1, precision, recall, and hamming loss
             accuracy = accuracy_score(labels_np.flatten(), preds_np.flatten())
             f1 = f1_score(labels_np, preds_np, average='micro', zero_division=0)
             precision = precision_score(labels_np, preds_np, average='micro', zero_division=0)
             recall = recall_score(labels_np, preds_np, average='micro', zero_division=0)
             hamming = hamming_loss(labels_np, preds_np)
 
-            # log validation metrics
             self.log('val_mean_auc', mean_auc, prog_bar=True)
             self.log('val_mean_ap', mean_ap, prog_bar=True)
             self.log('val_accuracy', accuracy, prog_bar=True)
@@ -343,19 +331,14 @@ class MultiAbnormalityClassifier(pl.LightningModule):
         except Exception as e:
             logger.error(f"Error computing validation metrics: {e}")
         
-        # clear outputs for next epoch
         self.validation_step_outputs.clear()
     
     def on_test_epoch_end(self):
         """
-        Compute epoch-level test metrics - PyTorch Lightning
-            
-        Aggregates predictions across all test batches and computes:
-        - Mean AUC across all classes
-        - Mean Average Precision
-        - Accuracy, F1, Precision, Recall, and Hamming Loss
+        Aggregates test batches and logs mean AUC, AP, and micro metrics.
+        
+        Classes with a single label log NaN for AUC and AP. Per-class scores print sorted by AUC.
         """
-        # concatenate all batch outputs and convert to numpy for sklearn metrics
         all_preds = torch.cat([x['preds'] for x in self.test_step_outputs])
         all_probs = torch.cat([x['probs'] for x in self.test_step_outputs])
         all_labels = torch.cat([x['labels'] for x in self.test_step_outputs])
@@ -441,13 +424,16 @@ class MultiAbnormalityClassifier(pl.LightningModule):
     
     def configure_optimizers(self):
         """
-        Configure optimizer and learning rate scheduler
+        Returns AdamW and a cosine annealing scheduler.
         
-        Frozen path: AdamW on the classification head only.
-        LoRA path: head at learning_rate, adapter params at encoder_lr.
+        The frozen path optimizes the classification head only. The LoRA path uses
+        learning_rate on the head and encoder_lr on adapter parameters.
         
         Returns:
-            Optimizer and learning rate scheduler configuration
+            dict: Optimizer and learning-rate scheduler configuration.
+        
+        Raises:
+            RuntimeError: If use_lora is True but the encoder has no trainable parameters.
         """
         if self.hparams.use_lora:
             lora_params = [p for p in self.encoder.parameters() if p.requires_grad]

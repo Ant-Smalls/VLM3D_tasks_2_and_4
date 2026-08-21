@@ -1,30 +1,8 @@
 # visualize_embeddings.py
-# purpose: extract class-specific attention-pooled embeddings from Task-2 checkpoints
-#          and save PCA / separation comparison figures for paper diagnostics
+# purpose: extract class-specific attention-pooled embeddings from checkpoints
+#          and save PCA / separation comparison figures
 # author: Anthony Smaldore
 #
-# Sonic example (1 GPU, frozen-600 best ckpt):
-#
-#   python3 src/scripts/visualize_embeddings.py \
-#     --checkpoints frozen600=/home/people/23225831/vlm3d_challenge/task_2_multi_abnormality_classification/sonic_vlm3d_challenge/src/outputs/checkpoints/best-epoch=13-val_mean_auc=0.6951.ckpt \
-#     --data_dir /scratch/23225831/.../sampled_train_fixed \
-#     --split /path/to/test_split.json \
-#     --classes all \
-#     --view all_classes \
-#     --output_dir src/outputs/embedding_viz/frozen600 \
-#     --batch_size 4
-#
-# all_classes / both also write inter_class_<name>.png (positives-only multi-class
-# PCA + centroid distance heatmap) and inter_class_centroid_distances_<name>.csv.
-#
-# Cross-checkpoint / single class (after LoRA lands):
-#
-#   python3 src/scripts/visualize_embeddings.py \
-#     --checkpoints frozen600=.../best-epoch=13-val_mean_auc=0.6951.ckpt lora600=.../best-....ckpt \
-#     --data_dir /scratch/.../sampled_train_fixed \
-#     --classes "Lung nodule" \
-#     --view cross_checkpoint \
-#     --output_dir src/outputs/embedding_viz/nodule_compare
 
 import os
 import sys
@@ -43,7 +21,7 @@ from sklearn.decomposition import PCA
 from tqdm import tqdm
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from modules.transforms import get_valid_transforms
+from modules.transforms import get_valid_transforms, window_set_from_checkpoint
 from modules.multiabnormality_classification_model import (
     MultiAbnormalityClassifier,
     CLASS_NAMES,
@@ -56,6 +34,12 @@ NEG_COLOR = '#EE5A6F'
 
 
 def parse_args():
+    """
+    Parses CLI arguments for class-embedding visualization.
+    
+    Returns:
+        argparse.Namespace: Parsed CLI arguments.
+    """
     parser = argparse.ArgumentParser(
         description=(
             'Visualize class-specific bag embeddings (attention-pooled z) '
@@ -111,6 +95,12 @@ def parse_args():
     parser.add_argument('--spatial_size', type=int, nargs=3, default=(96, 224, 224))
     parser.add_argument('--pixdim', type=float, nargs=3, default=(1.5, 1.5, 1.5))
     parser.add_argument(
+        '--window_set',
+        type=str,
+        default=None,
+        help='Override window set for all checkpoints. Default: read each checkpoint',
+    )
+    parser.add_argument(
         '--device',
         type=str,
         default='cuda',
@@ -121,6 +111,18 @@ def parse_args():
 
 
 def parse_checkpoints(raw: List[str]) -> Dict[str, str]:
+    """
+    Parses named checkpoint specs of the form "name=path".
+    
+    Args:
+        raw (list): CLI strings, each "name=path".
+    
+    Returns:
+        dict: Mapping from checkpoint name to checkpoint path.
+    
+    Raises:
+        ValueError: If a spec is missing "=" or has an empty name or path.
+    """
     checkpoints = {}
     for item in raw:
         if '=' not in item:
@@ -138,6 +140,18 @@ def parse_checkpoints(raw: List[str]) -> Dict[str, str]:
 
 
 def resolve_class_indices(class_args: List[str]) -> List[Tuple[int, str]]:
+    """
+    Resolves class-name arguments to (index, canonical_name) pairs from CLASS_NAMES.
+    
+    Args:
+        class_args (list): Class names, or a single "all" to select every class.
+    
+    Returns:
+        list: (class_index, canonical_class_name) pairs, without duplicates.
+    
+    Raises:
+        ValueError: If a name is unknown or no classes are selected.
+    """
     if len(class_args) == 1 and class_args[0].lower() == 'all':
         return list(enumerate(CLASS_NAMES))
 
@@ -160,14 +174,35 @@ def resolve_class_indices(class_args: List[str]) -> List[Tuple[int, str]]:
 
 
 def class_slug(name: str) -> str:
+    """
+    Builds a filesystem-safe slug from an abnormality class name.
+    
+    Args:
+        name (str): Abnormality class name.
+    
+    Returns:
+        str: Lowercase slug with non-alphanumeric runs replaced by "_".
+    """
     slug = re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_')
     return slug or 'class'
 
 
-def build_loader(split_data, args) -> DataLoader:
+def build_loader(split_data, args, window_set) -> DataLoader:
+    """
+    Builds a validation DataLoader with the named window set.
+    
+    Args:
+        split_data (list): Split records with "image" and "label" keys.
+        args (argparse.Namespace): CLI arguments (spatial_size, pixdim, batch_size, num_workers, device).
+        window_set (str): The name of the window set ("default" or "lung_mediastinum_bone").
+    
+    Returns:
+        DataLoader: Unshuffled loader over the split.
+    """
     transforms = get_valid_transforms(
         spatial_size=tuple(args.spatial_size),
         pixdim=tuple(args.pixdim),
+        window_set=window_set,
     )
     ds = Dataset(data=split_data, transform=transforms)
     return DataLoader(
@@ -180,6 +215,18 @@ def build_loader(split_data, args) -> DataLoader:
 
 
 def resolve_device(requested: str) -> torch.device:
+    """
+    Validates the requested device and returns a torch device.
+    
+    Args:
+        requested (str): Device name ("cuda" or "cpu").
+    
+    Returns:
+        torch.device: The requested device.
+    
+    Raises:
+        RuntimeError: If "cuda" is requested but CUDA is not available.
+    """
     if requested == 'cuda':
         if not torch.cuda.is_available():
             raise RuntimeError(
@@ -195,9 +242,15 @@ def extract_embeddings_for_checkpoint(
     device: torch.device,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
+    Loads a checkpoint and extracts per-volume class embeddings and labels.
+    
+    Args:
+        checkpoint_path (str): Path to a .ckpt file.
+        loader (DataLoader): Batched volumes and labels.
+        device (torch.device): Device for inference.
+    
     Returns:
-        z: [N, num_classes, emb_dim]
-        labels: [N, num_classes]
+        tuple: (z, labels) where z is [N, num_classes, emb_dim] and labels is [N, num_classes].
     """
     logger.info(f'Loading checkpoint: {checkpoint_path}')
     model = MultiAbnormalityClassifier.load_from_checkpoint(checkpoint_path)
@@ -226,6 +279,17 @@ def extract_embeddings_for_checkpoint(
 
 
 def l2_normalize(x: np.ndarray, axis: int = -1, eps: float = 1e-8) -> np.ndarray:
+    """
+    Divides vectors by their L2 norm along an axis.
+    
+    Args:
+        x (ndarray): Input array.
+        axis (int, optional): Axis along which to compute the norm. Default is -1.
+        eps (float, optional): Minimum norm used to avoid division by zero. Default is 1e-8.
+    
+    Returns:
+        ndarray: Array of the same shape as x, with unit-length vectors along axis.
+    """
     norms = np.linalg.norm(x, axis=axis, keepdims=True)
     return x / np.maximum(norms, eps)
 
@@ -235,8 +299,16 @@ def compute_separation_metrics(
     y: np.ndarray,
 ) -> Dict[str, float]:
     """
-    L2-normalize embeddings; μ_pos = mean of positives; cosine sim of each
-    sample to μ_pos; report means for Y=1 / Y=0 and Δ = mean_pos - mean_neg.
+    Computes cosine-similarity separation of class-positive embeddings from the positive centroid.
+    
+    L2-normalizes embeddings, takes the mean of class-positive vectors as the positive centroid, and reports mean cosine similarity of positives and negatives to that centroid.
+    
+    Args:
+        z_class (ndarray): Embeddings of shape [N, D] for one class.
+        y (ndarray): Per-volume labels for that class.
+    
+    Returns:
+        dict: mean_pos, mean_neg, separation, n_pos, and n_neg. Includes "sims" when both groups are present.
     """
     y = y.astype(bool)
     n_pos = int(y.sum())
@@ -267,6 +339,15 @@ def compute_separation_metrics(
 
 
 def fit_pca_2d(z_class: np.ndarray) -> Tuple[np.ndarray, PCA]:
+    """
+    Fits a 2-component PCA and returns the projected coordinates.
+    
+    Args:
+        z_class (ndarray): Embeddings of shape [N, D].
+    
+    Returns:
+        tuple: (coords, pca) where coords is [N, 2] and pca is the fitted PCA object.
+    """
     pca = PCA(n_components=2)
     coords = pca.fit_transform(z_class)
     return coords, pca
@@ -278,10 +359,17 @@ def collect_positive_embeddings(
     class_indices: List[Tuple[int, str]],
 ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
     """
-    Stack class-specific bag embeddings for positive labels only.
-
-    A multilabel patient contributes one point per positive class (using that
-    class's attention-pooled z). Returns (points [M, D], class_ids [M], names).
+    Stacks class-specific embeddings for class-positive volumes only.
+    
+    A multilabel volume contributes one point per positive class, using that class's attention-pooled embedding.
+    
+    Args:
+        z (ndarray): Embeddings of shape [N, num_classes, D].
+        labels (ndarray): Labels of shape [N, num_classes].
+        class_indices (list): (class_index, class_name) pairs to include.
+    
+    Returns:
+        tuple: (points, class_ids, names) where points is [M, D], class_ids is [M], and names is the class-name list.
     """
     points = []
     class_ids = []
@@ -309,7 +397,17 @@ def pairwise_centroid_cosine_distance(
     class_ids: np.ndarray,
     n_classes: int,
 ) -> np.ndarray:
-    """Return [C, C] matrix of 1 - cos(μ_i, μ_j); NaN if a class has no positives."""
+    """
+    Builds a pairwise centroid cosine-distance matrix (1 minus cosine similarity).
+    
+    Args:
+        points (ndarray): Embeddings of shape [M, D].
+        class_ids (ndarray): Class index per point, in [0, n_classes).
+        n_classes (int): Number of classes (rows and columns of the matrix).
+    
+    Returns:
+        ndarray: Distance matrix of shape [C, C]. Missing classes are NaN.
+    """
     dist = np.full((n_classes, n_classes), np.nan, dtype=np.float64)
     centroids = []
     for i in range(n_classes):
@@ -340,8 +438,17 @@ def plot_inter_class(
     distance_csv_path: str,
 ) -> None:
     """
-    Positives-only PCA across classes + centroid cosine-distance heatmap.
-    Written automatically with all_classes / both (and standalone inter_class).
+    Writes a positives-only PCA scatter and a centroid cosine-distance heatmap.
+    
+    Skips the plot if fewer than two positive points are present.
+    
+    Args:
+        z (ndarray): Embeddings of shape [N, num_classes, D].
+        labels (ndarray): Labels of shape [N, num_classes].
+        class_indices (list): (class_index, class_name) pairs to plot.
+        checkpoint_name (str): Checkpoint name used in titles and logs.
+        output_path (str): Output PNG path.
+        distance_csv_path (str): Output CSV path for the distance matrix.
     """
     points, class_ids, names = collect_positive_embeddings(z, labels, class_indices)
     n_classes = len(names)
@@ -413,6 +520,19 @@ def plot_all_classes(
     checkpoint_name: str,
     output_path: str,
 ) -> List[dict]:
+    """
+    Writes a per-class PCA grid of class-positive vs class-negative embeddings.
+    
+    Args:
+        z (ndarray): Embeddings of shape [N, num_classes, D].
+        labels (ndarray): Labels of shape [N, num_classes].
+        class_indices (list): (class_index, class_name) pairs to plot.
+        checkpoint_name (str): Checkpoint name used in titles and logs.
+        output_path (str): Output PNG path.
+    
+    Returns:
+        list: Per-class separation metric rows for the summary table.
+    """
     n = len(class_indices)
     ncols = 6 if n > 6 else max(n, 1)
     nrows = int(np.ceil(n / ncols))
@@ -475,6 +595,19 @@ def plot_cross_checkpoint(
     checkpoint_names: List[str],
     output_path: str,
 ) -> List[dict]:
+    """
+    Writes a per-checkpoint PCA and cosine-similarity histogram for one class.
+    
+    Args:
+        embeddings (dict): Mapping from checkpoint name to dicts with "z" and "labels".
+        class_idx (int): Index of the target class in CLASS_NAMES.
+        class_name (str): Canonical abnormality class name.
+        checkpoint_names (list): Checkpoint names in plot order.
+        output_path (str): Output PNG path.
+    
+    Returns:
+        list: Per-checkpoint separation metric rows for the summary table.
+    """
     n = len(checkpoint_names)
     fig, axes = plt.subplots(2, n, figsize=(4.2 * n, 7.0), squeeze=False)
 
@@ -550,6 +683,16 @@ def plot_cross_checkpoint(
 
 
 def cache_path(output_dir: str, checkpoint_name: str) -> str:
+    """
+    Returns the path of the per-checkpoint embedding cache file.
+    
+    Args:
+        output_dir (str): Root output directory.
+        checkpoint_name (str): Checkpoint name used in the filename.
+    
+    Returns:
+        str: Path to "embeddings_<checkpoint_name>.npz".
+    """
     return os.path.join(output_dir, f'embeddings_{checkpoint_name}.npz')
 
 
@@ -561,6 +704,20 @@ def load_or_extract(
     output_dir: str,
     use_cache: bool,
 ) -> Dict[str, np.ndarray]:
+    """
+    Loads cached class embeddings, or extracts them from the checkpoint and optionally caches them.
+    
+    Args:
+        name (str): Checkpoint name used in the cache filename.
+        path (str): Path to a .ckpt file.
+        loader (DataLoader): Batched volumes and labels.
+        device (torch.device): Device for inference.
+        output_dir (str): Directory for the cache file.
+        use_cache (bool): If True, read or write the .npz cache.
+    
+    Returns:
+        dict: Mapping with "z" and "labels" arrays.
+    """
     npz_path = cache_path(output_dir, name)
     if use_cache and os.path.exists(npz_path):
         logger.info(f'Loading cached embeddings: {npz_path}')
@@ -579,6 +736,17 @@ def build_summary_rows(
     class_indices: List[Tuple[int, str]],
     checkpoint_names: List[str],
 ) -> List[dict]:
+    """
+    Builds per-checkpoint, per-class separation metric rows.
+    
+    Args:
+        embeddings (dict): Mapping from checkpoint name to dicts with "z" and "labels".
+        class_indices (list): (class_index, class_name) pairs to include.
+        checkpoint_names (list): Checkpoint names in row order.
+    
+    Returns:
+        list: Rows for "comparison_summary.csv".
+    """
     rows = []
     for name in checkpoint_names:
         z = embeddings[name]['z']
@@ -604,6 +772,14 @@ def build_summary_rows(
 
 
 def main():
+    """
+    Extracts class embeddings for each named checkpoint and writes PCA comparison figures.
+    
+    Raises:
+        ValueError: If a checkpoint spec is invalid or a class name is unknown.
+        FileNotFoundError: If the split JSON or a checkpoint path does not exist.
+        RuntimeError: If "cuda" is requested but CUDA is not available.
+    """
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -634,11 +810,13 @@ def main():
         split_data = json.load(f)
     logger.info(f'Loaded split {split_path} ({len(split_data)} studies)')
 
-    loader = build_loader(split_data, args)
     checkpoint_names = list(checkpoints.keys())
 
     embeddings: Dict[str, Dict[str, np.ndarray]] = {}
     for name, path in checkpoints.items():
+        window_set = window_set_from_checkpoint(path, override=args.window_set)
+        logger.info(f'{name}: window_set={window_set}')
+        loader = build_loader(split_data, args, window_set)
         embeddings[name] = load_or_extract(
             name, path, loader, device, args.output_dir, args.cache_embeddings,
         )
@@ -656,7 +834,6 @@ def main():
                 out,
             )
 
-    # inter_class: auto with all_classes / both (single-ckpt or multi); also standalone
     if args.view in ('all_classes', 'inter_class', 'both'):
         for name in checkpoint_names:
             out = os.path.join(args.output_dir, f'inter_class_{name}.png')

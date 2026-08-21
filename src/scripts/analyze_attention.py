@@ -1,18 +1,8 @@
 # analyze_attention.py
 # purpose: export gated-attention slice weights for a target class (default Lung nodule)
-#          and summarize nodule+/− localization stats for paper Block-2 diagnostics
+#          and summarize nodule+/− localization stats
 # author: Anthony Smaldore
 #
-# Sonic example (1 GPU, frozen-600 + LoRA-600):
-#
-#   python3 src/scripts/analyze_attention.py \
-#     --checkpoints frozen600=src/outputs/checkpoints/best-epoch=13-val_mean_auc=0.6951.ckpt \
-#                   lora600=src/outputs_lora/checkpoints/best-epoch=09-val_mean_auc=0.7071.ckpt \
-#     --data_dir $DATA_DIR \
-#     --class_name "Lung nodule" \
-#     --output_dir src/outputs/attention_analysis \
-#     --batch_size 4 \
-#     --device cuda
 
 import os
 import sys
@@ -30,7 +20,7 @@ from monai.data import Dataset, DataLoader
 from tqdm import tqdm
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from modules.transforms import get_valid_transforms
+from modules.transforms import get_valid_transforms, window_set_from_checkpoint
 from modules.multiabnormality_classification_model import (
     MultiAbnormalityClassifier,
     CLASS_NAMES,
@@ -43,6 +33,12 @@ NEG_COLOR = '#EE5A6F'
 
 
 def parse_args():
+    """
+    Parses CLI arguments for the slice-attention analysis script.
+    
+    Returns:
+        argparse.Namespace: Parsed CLI arguments.
+    """
     parser = argparse.ArgumentParser(
         description=(
             'Analyze per-slice gated-attention weights for a target abnormality '
@@ -107,6 +103,12 @@ def parse_args():
     parser.add_argument('--spatial_size', type=int, nargs=3, default=(96, 224, 224))
     parser.add_argument('--pixdim', type=float, nargs=3, default=(1.5, 1.5, 1.5))
     parser.add_argument(
+        '--window_set',
+        type=str,
+        default=None,
+        help='Override window set for all checkpoints. Default: read each checkpoint',
+    )
+    parser.add_argument(
         '--device',
         type=str,
         default='cuda',
@@ -117,6 +119,18 @@ def parse_args():
 
 
 def parse_checkpoints(raw: List[str]) -> Dict[str, str]:
+    """
+    Parses named checkpoint specs of the form "name=path".
+    
+    Args:
+        raw (list): CLI strings, each "name=path".
+    
+    Returns:
+        dict: Mapping from checkpoint name to checkpoint path.
+    
+    Raises:
+        ValueError: If a spec is missing "=" or has an empty name or path.
+    """
     checkpoints = {}
     for item in raw:
         if '=' not in item:
@@ -134,6 +148,18 @@ def parse_checkpoints(raw: List[str]) -> Dict[str, str]:
 
 
 def resolve_class_index(class_name: str) -> Tuple[int, str]:
+    """
+    Resolves an abnormality class name to its index in CLASS_NAMES.
+    
+    Args:
+        class_name (str): Abnormality class name (case-insensitive).
+    
+    Returns:
+        tuple: (class_index, canonical_class_name) from CLASS_NAMES.
+    
+    Raises:
+        ValueError: If the name is not in CLASS_NAMES.
+    """
     name_to_idx = {n.lower(): i for i, n in enumerate(CLASS_NAMES)}
     key = class_name.lower()
     if key not in name_to_idx:
@@ -145,22 +171,51 @@ def resolve_class_index(class_name: str) -> Tuple[int, str]:
 
 
 def class_slug(name: str) -> str:
+    """
+    Builds a filesystem-safe slug from an abnormality class name.
+    
+    Args:
+        name (str): Abnormality class name.
+    
+    Returns:
+        str: Lowercase slug with non-alphanumeric runs replaced by "_".
+    """
     slug = re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_')
     return slug or 'class'
 
 
 def patient_id_from_path(image_path: str) -> str:
-    # manifest paths look like .../<patient_id>/<volume_stem>
+    """
+    Reads the patient id from a CT-RATE manifest image path.
+    
+    Args:
+        image_path (str): Volume path of the form .../<patient_id>/<volume_stem>.
+    
+    Returns:
+        str: The patient id (parent directory), or the path basename if there is no parent.
+    """
     parts = os.path.normpath(image_path).split(os.sep)
     if len(parts) >= 2:
         return parts[-2]
     return os.path.basename(image_path)
 
 
-def build_loader(split_data, args) -> DataLoader:
+def build_loader(split_data, args, window_set) -> DataLoader:
+    """
+    Builds a validation DataLoader with the named window set.
+    
+    Args:
+        split_data (list): Split records with "image" and "label" keys.
+        args (argparse.Namespace): CLI arguments (spatial_size, pixdim, batch_size, num_workers, device).
+        window_set (str): The name of the window set ("default" or "lung_mediastinum_bone").
+    
+    Returns:
+        DataLoader: Unshuffled loader over the split.
+    """
     transforms = get_valid_transforms(
         spatial_size=tuple(args.spatial_size),
         pixdim=tuple(args.pixdim),
+        window_set=window_set,
     )
     ds = Dataset(data=split_data, transform=transforms)
     return DataLoader(
@@ -173,6 +228,18 @@ def build_loader(split_data, args) -> DataLoader:
 
 
 def resolve_device(requested: str) -> torch.device:
+    """
+    Validates the requested device and returns a torch device.
+    
+    Args:
+        requested (str): Device name ("cuda" or "cpu").
+    
+    Returns:
+        torch.device: The requested device.
+    
+    Raises:
+        RuntimeError: If "cuda" is requested but CUDA is not available.
+    """
     if requested == 'cuda':
         if not torch.cuda.is_available():
             raise RuntimeError(
@@ -188,9 +255,15 @@ def extract_attention_for_checkpoint(
     device: torch.device,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
+    Loads a checkpoint and extracts per-volume slice attention and labels.
+    
+    Args:
+        checkpoint_path (str): Path to a .ckpt file.
+        loader (DataLoader): Batched volumes and labels.
+        device (torch.device): Device for inference.
+    
     Returns:
-        attention: [N, S, num_classes]
-        labels: [N, num_classes]
+        tuple: (attention, labels) where attention is [N, S, num_classes] and labels is [N, num_classes].
     """
     logger.info(f'Loading checkpoint: {checkpoint_path}')
     model = MultiAbnormalityClassifier.load_from_checkpoint(checkpoint_path)
@@ -220,7 +293,15 @@ def extract_attention_for_checkpoint(
 
 def attention_stats_1d(weights: np.ndarray) -> Dict[str, float]:
     """
-    Stats for one volume's attention over slices (already softmax-normalized).
+    Computes sharpness stats for one volume's slice attention.
+    
+    Clips weights away from zero before entropy so log is defined, then renormalizes.
+    
+    Args:
+        weights (ndarray): Softmax-normalized slice weights of shape [S].
+    
+    Returns:
+        dict: Entropy, perplexity, top-k mass, peak slice, and slice count.
     """
     w = np.asarray(weights, dtype=np.float64)
     w = np.clip(w, 1e-12, 1.0)
@@ -245,7 +326,16 @@ def select_case_indices(
     labels_class: np.ndarray,
     seed: int,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """All positives; matched-size random negatives (or all negatives if fewer)."""
+    """
+    Selects all class-positive indices and a matched-size random negative subset.
+    
+    Args:
+        labels_class (ndarray): Per-volume labels for the target class.
+        seed (int): RNG seed for negative sampling.
+    
+    Returns:
+        tuple: (pos_idx, neg_idx). Negatives are downsampled to match positives when there are more negatives.
+    """
     pos_idx = np.where(labels_class >= 0.5)[0]
     neg_idx = np.where(labels_class < 0.5)[0]
     rng = np.random.default_rng(seed)
@@ -265,6 +355,21 @@ def build_volume_rows(
     pos_idx: np.ndarray,
     neg_idx: np.ndarray,
 ) -> pd.DataFrame:
+    """
+    Builds a per-volume slice-attention stats table for class-positive and class-negative groups.
+    
+    Args:
+        ckpt_name (str): Checkpoint name written into the table.
+        class_name (str): Canonical abnormality class name.
+        patient_ids (list): Patient id per split row.
+        attention_class (ndarray): Slice attention of shape [N, S] for the target class.
+        labels_class (ndarray): Per-volume labels for the target class.
+        pos_idx (ndarray): Class-positive volume indices.
+        neg_idx (ndarray): Class-negative volume indices.
+    
+    Returns:
+        DataFrame: One row per selected volume with entropy, top-k mass, and peak slice.
+    """
     rows = []
     for group, indices in (('pos', pos_idx), ('neg', neg_idx)):
         for i in indices:
@@ -282,6 +387,15 @@ def build_volume_rows(
 
 
 def summarize_groups(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Aggregates mean and std of slice-attention stats by checkpoint and group.
+    
+    Args:
+        df (DataFrame): Per-volume stats from build_volume_rows.
+    
+    Returns:
+        DataFrame: One row per (checkpoint, group) with mean and std of each metric.
+    """
     metrics = [
         'entropy', 'perplexity', 'top1_mass', 'top5_mass', 'top10_mass', 'peak_slice',
     ]
@@ -306,6 +420,16 @@ def plot_mean_attention_curves(
     title: str,
     out_path: str,
 ):
+    """
+    Writes a mean and standard-deviation slice-attention curve for class-positive and class-negative volumes.
+    
+    Args:
+        attention_class (ndarray): Slice attention of shape [N, S] for the target class.
+        pos_idx (ndarray): Class-positive volume indices.
+        neg_idx (ndarray): Class-negative volume indices.
+        title (str): Plot title.
+        out_path (str): Output PNG path.
+    """
     pos = attention_class[pos_idx]
     neg = attention_class[neg_idx]
     s = np.arange(attention_class.shape[1])
@@ -336,6 +460,16 @@ def plot_individual_attention(
     stats: Dict[str, float],
     out_path: str,
 ):
+    """
+    Writes a per-volume slice-attention bar plot with the peak slice marked.
+    
+    Args:
+        weights (ndarray): Slice attention of shape [S] for one volume.
+        patient_id (str): Patient id used in the title and filename.
+        group (str): Group label ("pos" or "neg").
+        stats (dict): Stats from attention_stats_1d, including "peak_slice".
+        out_path (str): Output PNG path.
+    """
     s = np.arange(weights.shape[0])
     color = POS_COLOR if group == 'pos' else NEG_COLOR
     fig, ax = plt.subplots(figsize=(10, 3.5))
@@ -354,6 +488,16 @@ def plot_individual_attention(
 
 
 def plot_group_stat_bars(summary_df: pd.DataFrame, ckpt_name: str, out_path: str):
+    """
+    Writes grouped bars of mean entropy, top-k mass, and perplexity for one checkpoint.
+    
+    Skips the plot if a group is missing.
+    
+    Args:
+        summary_df (DataFrame): Group summary from summarize_groups.
+        ckpt_name (str): Checkpoint name to plot.
+        out_path (str): Output PNG path.
+    """
     sub = summary_df[summary_df['checkpoint'] == ckpt_name]
     if sub.empty:
         return
@@ -391,6 +535,15 @@ def plot_group_stat_bars(summary_df: pd.DataFrame, ckpt_name: str, out_path: str
 
 
 def cache_path(output_subdir: str) -> str:
+    """
+    Returns the path of the per-checkpoint slice-attention cache file.
+    
+    Args:
+        output_subdir (str): Checkpoint output directory.
+    
+    Returns:
+        str: Path to "attention_cache.npz" under that directory.
+    """
     return os.path.join(output_subdir, 'attention_cache.npz')
 
 
@@ -402,6 +555,20 @@ def load_or_extract(
     output_subdir: str,
     use_cache: bool,
 ) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Loads cached slice attention, or extracts it from the checkpoint and optionally caches it.
+    
+    Args:
+        ckpt_name (str): Checkpoint name.
+        ckpt_path (str): Path to a .ckpt file.
+        loader (DataLoader): Batched volumes and labels.
+        device (torch.device): Device for inference.
+        output_subdir (str): Checkpoint output directory for the cache file.
+        use_cache (bool): If True, read or write "attention_cache.npz".
+    
+    Returns:
+        tuple: (attention, labels) where attention is [N, S, num_classes] and labels is [N, num_classes].
+    """
     os.makedirs(output_subdir, exist_ok=True)
     path = cache_path(output_subdir)
     if use_cache and os.path.exists(path):
@@ -425,6 +592,21 @@ def write_checkpoint_outputs(
     labels: np.ndarray,
     args,
 ) -> pd.DataFrame:
+    """
+    Writes per-checkpoint CSVs and slice-attention plots for the target class.
+    
+    Args:
+        ckpt_name (str): Checkpoint name used as the output subdirectory.
+        class_name (str): Canonical abnormality class name.
+        class_idx (int): Index of the target class in CLASS_NAMES.
+        patient_ids (list): Patient id per split row.
+        attention (ndarray): Slice attention of shape [N, S, num_classes].
+        labels (ndarray): Labels of shape [N, num_classes].
+        args (argparse.Namespace): CLI arguments (output_dir, seed, max_plot_pos, max_plot_neg).
+    
+    Returns:
+        DataFrame: Per-volume stats for the selected class-positive and class-negative cases.
+    """
     out_dir = os.path.join(args.output_dir, ckpt_name)
     os.makedirs(out_dir, exist_ok=True)
     plot_dir = os.path.join(out_dir, 'cases')
@@ -462,7 +644,6 @@ def write_checkpoint_outputs(
         out_path=os.path.join(out_dir, f'group_stats_{class_slug(class_name)}.png'),
     )
 
-    # individual case plots (subset)
     for group, indices, limit in (
         ('pos', pos_idx, args.max_plot_pos),
         ('neg', neg_idx, args.max_plot_neg),
@@ -487,15 +668,23 @@ def write_cross_checkpoint_comparison(
     class_name: str,
     output_dir: str,
 ):
+    """
+    Writes a cross-checkpoint summary table and a class-positive sharpness comparison plot.
+    
+    Does nothing if fewer than two checkpoints are present.
+    
+    Args:
+        all_volume_dfs (list): Per-checkpoint DataFrames from write_checkpoint_outputs.
+        class_name (str): Canonical abnormality class name.
+        output_dir (str): Root output directory.
+    """
     if len(all_volume_dfs) < 2:
         return
     merged = pd.concat(all_volume_dfs, ignore_index=True)
-    # pivot mean group stats per checkpoint for a compact comparison table
     summary = summarize_groups(merged)
     path = os.path.join(output_dir, f'cross_checkpoint_summary_{class_slug(class_name)}.csv')
     summary.to_csv(path, index=False)
 
-    # side-by-side entropy / top5 for pos group
     pos = summary[summary['group'] == 'pos'].set_index('checkpoint')
     if len(pos) >= 2:
         metrics = ['entropy_mean', 'top5_mass_mean', 'top1_mass_mean', 'perplexity_mean']
@@ -524,6 +713,14 @@ def write_cross_checkpoint_comparison(
 
 
 def main():
+    """
+    Runs slice-attention analysis for each named checkpoint on the chosen split.
+    
+    Raises:
+        ValueError: If a checkpoint spec is invalid or the class name is unknown.
+        FileNotFoundError: If the split JSON or a checkpoint path does not exist.
+        RuntimeError: If "cuda" is requested but unavailable, or attention row count does not match the split.
+    """
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -545,12 +742,16 @@ def main():
     logger.info(f'Loaded split {split_path} with {len(split_data)} volumes')
 
     os.makedirs(args.output_dir, exist_ok=True)
-    loader = build_loader(split_data, args)
 
     volume_dfs = []
     for ckpt_name, ckpt_path in checkpoints.items():
         if not os.path.exists(ckpt_path):
             raise FileNotFoundError(f'Checkpoint not found: {ckpt_path}')
+        window_set = window_set_from_checkpoint(
+            ckpt_path, override=args.window_set
+        )
+        logger.info(f'{ckpt_name}: window_set={window_set}')
+        loader = build_loader(split_data, args, window_set)
         subdir = os.path.join(args.output_dir, ckpt_name)
         attention, labels = load_or_extract(
             ckpt_name, ckpt_path, loader, device, subdir, args.cache_attention

@@ -14,21 +14,26 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 
-# add src to path for module imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.data_loader import create_subset_manifest
 from modules.data_loader import create_train_val_test_splits
 from modules.data_loader import create_stratified_kfold_splits
-from modules.transforms import get_train_transforms, get_valid_transforms
+from modules.transforms import (
+    get_train_transforms,
+    get_valid_transforms,
+    KNOWN_WINDOW_SETS,
+    resolve_window_set,
+)
 from modules.multiabnormality_classification_model import MultiAbnormalityClassifier
 
 logger = logging.getLogger(__name__)
 
 def parse_args():
     """
-    Parse command line arguments to set the training parameters and output specifications
+    Parses CLI arguments for training the multi-abnormality classifier.
+    
     Returns:
-        args: Parsed command line arguments
+        argparse.Namespace: Parsed CLI arguments.
     """
     parser = argparse.ArgumentParser(description='Train Multi-Abnormality Classifier')
 
@@ -51,7 +56,7 @@ def parse_args():
     parser.add_argument('--encoder_type', type=str, default='dinov2',
                     choices=['dinov2', 'dinov3'],
                     help='Type of encoder to use')
-    # LoRA settings (dinov2 only; default path stays fully frozen)
+    # LoRA is DINOv2-only; the default path stays fully frozen
     parser.add_argument('--use_lora', action='store_true',
                         help='Attach LoRA adapters on DINOv2 attention (Q/K/V)')
     parser.add_argument('--lora_r', type=int, default=8,
@@ -64,9 +69,16 @@ def parse_args():
                         help='Comma-separated peft target module names')
     parser.add_argument('--encoder_lr', type=float, default=1e-4,
                         help='Learning rate for LoRA adapter params (only used with --use_lora)')
-    # Attention pooling (default 0 = full softmax; matches frozen-600 baseline)
+    # Top-k pooling; default 0 is full softmax and matches frozen-600
     parser.add_argument('--attn_topk', type=int, default=0,
                         help='If >0, keep top-k slice attention weights per class then renormalize')
+    parser.add_argument(
+        '--window_set',
+        type=str,
+        default='default',
+        choices=list(KNOWN_WINDOW_SETS),
+        help='Named 3-channel HU layout (default keeps frozen-600 preprocess)',
+    )
     # K-fold settings 
     parser.add_argument('--use_kfold', action='store_true', help='Use multilabel stratified k-fold cross validation')
     parser.add_argument('--k_folds', type=int, default=5, help='Number of folds for cross validation')
@@ -83,13 +95,15 @@ def parse_args():
 
 def prepare_data(args):
     """
-    Create manifest and split into train/val/test sets
+    Builds or loads the subset manifest and train/val/test splits.
+    
+    When "--use_kfold" is set, test_data is the fold validation split.
+    
     Args:
-        args: Parsed command line arguments
+        args (argparse.Namespace): CLI arguments (data_dir, labels_csv, use_kfold, k_folds, fold, train_split, seed).
+    
     Returns:
-        train_data: Training data
-        val_data: Validation data
-        test_data: Test data
+        tuple: (train_data, val_data, test_data) split records with "image" and "label" keys.
     """
     
     # set directory to contain the patient data manifest 
@@ -176,27 +190,29 @@ def prepare_data(args):
 
 def create_dataloaders(train_data, val_data, test_data, args):
     """
-    Create MONAI datasets and PyTorch dataloaders
+    Builds train, validation, and test DataLoaders with the named window set.
+    
     Args:
-        train_data: Training data
-        val_data: Validation data
-        test_data: Test data
-        args: Parsed command line arguments
+        train_data (list): Training split records with "image" and "label" keys.
+        val_data (list): Validation split records with "image" and "label" keys.
+        test_data (list): Test split records with "image" and "label" keys.
+        args (argparse.Namespace): CLI arguments (batch_size, num_workers, window_set).
+    
     Returns:
-        train_loader: Training dataloader
-        val_loader: Validation dataloader
-        test_loader: Test dataloader
+        tuple: (train_loader, val_loader, test_loader).
     """
     
     # create the training and validation transforms with the get_train_transforms and get_valid_transforms functions
     train_transforms = get_train_transforms(
         spatial_size=(96, 224, 224),
-        pixdim=(1.5, 1.5, 1.5)
+        pixdim=(1.5, 1.5, 1.5),
+        window_set=args.window_set,
     )
     
     val_transforms = get_valid_transforms(
         spatial_size=(96, 224, 224),
-        pixdim=(1.5, 1.5, 1.5)
+        pixdim=(1.5, 1.5, 1.5),
+        window_set=args.window_set,
     )
     
     # create the training, validation, and test datasets
@@ -234,13 +250,14 @@ def create_dataloaders(train_data, val_data, test_data, args):
 
 def calculate_position_weights(train_dataset, num_classes):
     """
-    Calculate position weights for BCEWithLogitsLoss function to handle class imbalance
-
+    Computes per-class positive weights for BCEWithLogitsLoss from the training labels.
+    
     Args:
-        train_dataset: Training dataset
-        num_classes: Number of classes
+        train_dataset (list): Training split records with a "label" key.
+        num_classes (int): Number of abnormality classes.
+    
     Returns:
-        position_weights: Position weights
+        Tensor: Per-class positive weights, clamped to [1.0, 5.0].
     """
     label_counts = torch.zeros(num_classes)
     
@@ -264,7 +281,10 @@ def calculate_position_weights(train_dataset, num_classes):
 
 def main():
     """
-    Main function to train the multi-abnormality classification model
+    Trains the multi-abnormality classifier and evaluates the best checkpoint on the test split.
+    
+    Raises:
+        ValueError: If LoRA is requested with a non-"dinov2" encoder, LoRA targets are empty, "--attn_topk" is negative, or the window-set name is unknown.
     """
     # configure logging
     logging.basicConfig(
@@ -286,6 +306,7 @@ def main():
         raise ValueError("--lora_targets must list at least one module name when --use_lora is set")
     if args.attn_topk < 0:
         raise ValueError(f"--attn_topk must be >= 0 (got {args.attn_topk})")
+    resolve_window_set(args.window_set)
     
     # prepare the data and create the dataloaders
     logger.info("Preparing data...")
@@ -306,6 +327,7 @@ def main():
         )
     if args.attn_topk > 0:
         logger.info(f"Attention top-k pooling enabled: k={args.attn_topk}")
+    logger.info(f"Window set: {args.window_set}")
     model = MultiAbnormalityClassifier(
         encoder_type=args.encoder_type,
         local_model_dir=args.encoder_dir,
@@ -320,9 +342,9 @@ def main():
         lora_targets=lora_targets,
         encoder_lr=args.encoder_lr,
         attn_topk=args.attn_topk,
+        window_set=args.window_set,
     )
     
-    # setup the checkpoint callback to save the best model based on the validation accuracy
     checkpoint_dir = os.path.join(args.output_dir, 'checkpoints')
     checkpoint_callback = ModelCheckpoint(
         dirpath=checkpoint_dir,
@@ -334,7 +356,6 @@ def main():
         verbose=True
     )
 
-    # setup the TensorBoard logger for tracking model perfromance and other visualizations 
     tb_logger = TensorBoardLogger(
         save_dir=args.output_dir,
         name='lightning_logs',
@@ -342,16 +363,15 @@ def main():
         log_graph=True,
     )
     
-    # create the early stopping and checkpoint callbacks with trainer from the PyTorch Lightning Trainer class to train the model
     logger.info("Creating trainer...")
     
-    # optionally use early stopping after 6 epochs of no improvement in the validation mean AUC score
+    # Optionally use early stopping after 6 epochs of no improvement on val_mean_auc
     #early_stopping_callback = EarlyStopping(
     #    monitor='val_mean_auc',
     #    mode='max',
     #    patience=6,
     #)
-    # add early_stopping_callback to the callbacks list 
+    # Add early_stopping_callback to the callbacks list 
 
     trainer = Trainer(
         max_epochs=args.max_epochs,
@@ -364,7 +384,6 @@ def main():
         enable_progress_bar=True
     )
     
-    # load the data into the model, train it, and display the best model path and validation accuracy
     logger.info("Starting training...")
     trainer.fit(model, train_loader, val_loader)
     

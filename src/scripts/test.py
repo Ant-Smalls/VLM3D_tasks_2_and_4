@@ -13,7 +13,7 @@ from monai.data import Dataset, DataLoader
 from pytorch_lightning import Trainer
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from modules.transforms import get_valid_transforms
+from modules.transforms import get_valid_transforms, window_set_from_checkpoint
 from modules.multiabnormality_classification_model import MultiAbnormalityClassifier
 
 logger = logging.getLogger(__name__)
@@ -21,9 +21,10 @@ logger = logging.getLogger(__name__)
 
 def parse_args():
     """
-    Parse command line arguments to set the training parameters and output specifications
+    Parses CLI arguments for checkpoint evaluation on the test split.
+    
     Returns:
-        args: Parsed command line arguments
+        argparse.Namespace: Parsed CLI arguments.
     """
     parser = argparse.ArgumentParser(description='Evaluate Multi-Abnormality Classifier')
 
@@ -38,6 +39,12 @@ def parse_args():
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--spatial_size', type=int, nargs=3, default=(96, 224, 224))
     parser.add_argument('--pixdim', type=float, nargs=3, default=(1.5, 1.5, 1.5))
+    parser.add_argument(
+        '--window_set',
+        type=str,
+        default=None,
+        help='Override window set. Default: read from checkpoint, else default layout',
+    )
 
     parser.add_argument('--use_kfold', action='store_true', help='Evaluate a specific fold from the k-fold cross validation')
     parser.add_argument('--fold', type=int, default=0, help='Which fold to evaluate')
@@ -45,18 +52,22 @@ def parse_args():
     return parser.parse_args()
 
 
-def build_test_loader(test_data, args):
+def build_test_loader(test_data, args, window_set):
     """
-    Build the test dataloader
+    Builds an unshuffled test DataLoader with the named window set.
+    
     Args:
-        test_data: Test data
-        args: Parsed command line arguments
+        test_data (list): Split records with "image" and "label" keys.
+        args (argparse.Namespace): CLI arguments (spatial_size, pixdim, batch_size, num_workers).
+        window_set (str): The name of the window set ("default" or "lung_mediastinum_bone").
+    
     Returns:
-        test_loader: Test dataloader
+        DataLoader: Unshuffled loader over the test split.
     """
     transforms = get_valid_transforms(
         spatial_size=tuple(args.spatial_size),
         pixdim=tuple(args.pixdim),
+        window_set=window_set,
     )
     ds = Dataset(data=test_data, transform=transforms)
     return DataLoader(
@@ -69,6 +80,14 @@ def build_test_loader(test_data, args):
 
 
 def main():
+    """
+    Evaluates a trained checkpoint on the held-out test split.
+    
+    Uses a k-fold validation split when "--use_kfold" is set.
+    
+    Raises:
+        FileNotFoundError: If the split JSON or the checkpoint path does not exist.
+    """
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -95,13 +114,18 @@ def main():
     if not os.path.exists(args.checkpoint):
         raise FileNotFoundError(f"Checkpoint not found: {args.checkpoint}")
 
+    window_set = window_set_from_checkpoint(
+        args.checkpoint, override=args.window_set
+    )
+    logger.info(f"Window set: {window_set} (from checkpoint unless --window_set set)")
+
     logger.info(f"Loading test split from {test_split_path}")
     with open(test_split_path, 'r') as f:
         test_data = json.load(f)
     logger.info(f"Test samples: {len(test_data)}")
 
     logger.info("Building test dataloader...")
-    test_loader = build_test_loader(test_data, args)
+    test_loader = build_test_loader(test_data, args, window_set)
 
     logger.info(f"Loading model from {args.checkpoint}")
     model = MultiAbnormalityClassifier.load_from_checkpoint(args.checkpoint)
