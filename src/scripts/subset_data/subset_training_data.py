@@ -29,7 +29,6 @@ if total_available < SAMPLE_SIZE:
 winners = random.sample(patient_folders, SAMPLE_SIZE)
 print(f"Randomly selected {len(winners)} folders. Moving them now...")
 
-# We use move() instead of copy() because it's instant on the same disk
 count = 0
 for folder_name in tqdm(winners):
     src_path = os.path.join(SOURCE_DIR, folder_name)
